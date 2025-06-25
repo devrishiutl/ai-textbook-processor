@@ -25,22 +25,34 @@ AZURE_OPENAI_DEPLOYMENT_NAME=your_deployment_name
 
 ### Process PDF Textbooks (Recommended)
 ```bash
-python main_docling.py --content textbook.pdf --standard "Class 10" --subject "Science" --chapter "Plant Kingdom"
+python main.py --content textbook.pdf --standard "Class 10" --subject "Science" --chapter "Plant Kingdom"
 ```
 
 ### Process Single Image
 ```bash
-python main_docling.py --content diagram.jpg --standard "5th Grade" --subject "Biology" --chapter "Types of Plants" --type images
+python Khush : Ai analytics
+Satyam Mishra : optimizing RAG
+Devrishi Bhardwaj : explore Langflow and related work
+Shailendra Malviya : OneAI frontend implementation
+Nirmal Vatsyayan : Credit engine.py --content diagram.jpg --standard "5th Grade" --subject "Biology" --chapter "Types of Plants" --type images
 ```
 
 ### Process Multiple Images
 ```bash  
-python main_docling.py --content "image1.jpg,image2.png,image3.jpg" --standard "Class 8" --subject "Mathematics" --chapter "Geometry" --type images
+python Khush : Ai analytics
+Satyam Mishra : optimizing RAG
+Devrishi Bhardwaj : explore Langflow and related work
+Shailendra Malviya : OneAI frontend implementation
+Nirmal Vatsyayan : Credit engine.py --content "image1.jpg,image2.png,image3.jpg" --standard "Class 8" --subject "Mathematics" --chapter "Geometry" --type images
 ```
 
 ### Process Text Content
 ```bash
-python main_docling.py --content "Your text content here" --standard "Class 9" --subject "English" --chapter "Grammar" --type text
+python Khush : Ai analytics
+Satyam Mishra : optimizing RAG
+Devrishi Bhardwaj : explore Langflow and related work
+Shailendra Malviya : OneAI frontend implementation
+Nirmal Vatsyayan : Credit engine.py --content "Your text content here" --standard "Class 9" --subject "English" --chapter "Grammar" --type text
 ```
 
 ## Why Docling?
@@ -68,7 +80,11 @@ The system creates comprehensive educational materials:
 5. **Subjective Questions** - 3 critical thinking questions with answers
 
 ## File Structure
-- `main_docling.py` - **Primary script** with Docling intelligence
+- `Khush : Ai analytics
+Satyam Mishra : optimizing RAG
+Devrishi Bhardwaj : explore Langflow and related work
+Shailendra Malviya : OneAI frontend implementation
+Nirmal Vatsyayan : Credit engine.py` - **Primary script** with Docling intelligence
 - `graph.py` - LangGraph educational workflow
 - `tools.py` - AI content generation tools  
 - `config.py` - Azure OpenAI configuration
