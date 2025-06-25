@@ -7,8 +7,8 @@ python main.py \
   --chapter "The Wonderful World of Science"
 
 python main.py \
-  --content "diagram1.jpg,diagram2.png,chart.jpg,illustration.png" \
-  --standard "Grade 8" \
+  --content "/Users/devrishibhardwaj/Downloads/images/1.png,/Users/devrishibhardwaj/Downloads/images/2.png,/Users/devrishibhardwaj/Downloads/images/3.png,/Users/devrishibhardwaj/Downloads/images/4.png,/Users/devrishibhardwaj/Downloads/images/5.png"
+  --standard "Class 6" \
   --subject "Science" \
-  --chapter "Plant Kingdom" \
+  --chapter "The Wonderful World of Science"
   --type images

@@ -333,26 +333,31 @@ def encode_image_base64(img_path):
 def vision_understand_tool(images, standard, subject, lesson, chat_history=[]):
     """Enhanced vision understanding tool"""
     try:
-        vision_inputs = []
+        # Prepare content array for the user message
+        user_content = [
+            {"type": "text", "text": f"Extract and analyze all educational content from these images for {standard} level {subject}, focusing on {lesson}. Provide detailed text extraction, concept identification, and educational analysis suitable for the grade level."}
+        ]
+        
+        # Add each image to the content
         for img_path in images:
             encoded = encode_image_base64(img_path)
             if encoded.startswith("ERROR"):
                 return encoded
             
-            vision_inputs.append({
+            user_content.append({
                 "type": "image_url",
                 "image_url": {"url": f"data:image/jpeg;base64,{encoded}"}
             })
 
-        messages = chat_history + [
-            {"role": "system", "content": f"You are an educational assistant for {standard} level {subject}, focusing on {lesson}."},
-            *vision_inputs,
-            {"role": "user", "content": "Extract and analyze educational content from these images with attention to grade-level appropriateness."}
+        messages = [
+            {"role": "system", "content": f"You are an expert educational content analyzer for {standard} level {subject}, specializing in {lesson}. Extract ALL text, analyze visual content, identify key concepts, and provide comprehensive educational analysis."},
+            {"role": "user", "content": user_content}
         ]
         
         response = azure_client.chat.completions.create(
             model=AZURE_DEPLOYMENT_NAME,
-            messages=messages
+            messages=messages,
+            max_tokens=2000  # Increase for detailed analysis
         )
         return response.choices[0].message.content
     except Exception as e:
