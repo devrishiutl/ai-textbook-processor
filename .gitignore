@@ -1,0 +1,48 @@
+# Byte-compiled / cache files
+__pycache__/
+*.py[cod]
+*.so
+*.pyd
+*.pyo
+
+# Virtual environment
+.venv/
+env/
+venv/
+env_*/
+
+# Python tool settings
+*.env
+.env
+.env.*
+
+# VSCode settings
+.vscode/
+.idea/
+
+# macOS system files
+.DS_Store
+
+# Logs and debug output
+*.log
+
+# Output folders
+output/
+dist/
+build/
+*.egg-info/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# PDF, image, or OCR outputs
+*.pdf
+*.png
+*.jpg
+*.jpeg
+
+# LangGraph cache (if any custom cache used)
+.cache/
+
+# __init__.py generated files
+*.pyc

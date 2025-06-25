@@ -1,0 +1,14 @@
+python main_docling.py --content [INPUT] --standard [GRADE] --subject [SUBJECT] --chapter [CHAPTER]
+
+python main_docling.py \
+  --content "/Users/devrishibhardwaj/Downloads/6th_science_ch1.pdf" \
+  --standard "Class 6" \
+  --subject "Science" \
+  --chapter "The Wonderful World of Science"
+
+python main_docling.py \
+  --content "diagram1.jpg,diagram2.png,chart.jpg,illustration.png" \
+  --standard "Grade 8" \
+  --subject "Science" \
+  --chapter "Plant Kingdom" \
+  --type images
