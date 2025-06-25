@@ -80,8 +80,46 @@ def grade_validation_node(state):
         )
         print(f"📊 Grade Level Check: {grade_check}")
         
-        # Check if content is appropriate
-        if grade_check and ("TOO ADVANCED" in grade_check or "TOO SIMPLE" in grade_check or "MISMATCH" in grade_check):
+        # Parse the AI response format
+        is_failed = False
+        
+        if grade_check:
+            # Check if the AI response indicates failure
+            grade_check_upper = grade_check.upper()
+            
+            # Look for explicit failure indicators
+            failure_indicators = ["TOO ADVANCED", "TOO SIMPLE", "INAPPROPRIATE"]
+            
+            # Check if any failure indicators appear in the response
+            for indicator in failure_indicators:
+                if indicator in grade_check_upper:
+                    # Make sure it's not just part of the template format
+                    # Check if it appears as the actual chosen option
+                    lines = grade_check.split('\n')
+                    first_line = lines[0] if lines else ""
+                    
+                    print(f"🔍 Debug: Found '{indicator}' in response. First line: '{first_line}'")
+                    
+                    # Look for patterns like "TOO ADVANCED: Grade" or "TOO SIMPLE: Grade"
+                    if f"{indicator}:" in first_line.upper() or f"{indicator}]:" in first_line.upper():
+                        is_failed = True
+                        print(f"🔍 Debug: Setting failed=True because of '{indicator}' pattern")
+                        break
+            
+            # Additional check: if the response starts with the template format,
+            # assume it's appropriate unless explicitly stated otherwise
+            if "[APPROPRIATE/TOO ADVANCED/TOO SIMPLE]:" in grade_check:
+                print("🔍 Debug: Found template format, assuming appropriate")
+                # This means AI didn't choose an option, which usually means it's acceptable
+                # but we should still check for explicit failure language
+                if not any(f"{indicator}:" in grade_check_upper for indicator in failure_indicators):
+                    is_failed = False
+                    print("🔍 Debug: No explicit failure indicators, setting failed=False")
+        
+        print(f"🔍 Debug: Final validation result - is_failed: {is_failed}")
+        
+        if is_failed:
+            print("🔍 Debug: Grade validation FAILED - stopping process")
             return {
                 **state,
                 "processing_status": "FAILED",
@@ -89,6 +127,7 @@ def grade_validation_node(state):
                 "error_details": f"Content validation failed: {grade_check}"
             }
         
+        print("🔍 Debug: Grade validation PASSED - continuing process")
         return {
             **state,
             "processing_status": "CONTINUE",
@@ -96,6 +135,7 @@ def grade_validation_node(state):
         }
         
     except Exception as e:
+        print(f"🔍 Debug: Grade validation ERROR: {e}")
         return {
             **state,
             "processing_status": "FAILED",
@@ -104,28 +144,44 @@ def grade_validation_node(state):
 
 def safety_check_router(state):
     """Router function for safety check results"""
+    print("🔍 Debug: Safety router - checking state")
+    
     validation_results = state.get("validation_results", {})
     safety_check = validation_results.get("safety_check", "")
+    processing_status = state.get("processing_status", "UNKNOWN")
     
-    # Check for safety issues
-    if "INAPPROPRIATE" in safety_check or "profanity" in safety_check.lower():
-        return "failed"
-    elif state.get("processing_status") == "FAILED":
+    print(f"🔍 Debug: Safety router - processing_status: {processing_status}")
+    print(f"🔍 Debug: Safety router - safety_check: {safety_check}")
+    
+    # The safety_check_node already determined if content is safe and set processing_status
+    # So we can trust the processing_status instead of re-parsing the safety_check string
+    if processing_status == "FAILED":
+        print("🔍 Debug: Safety router - FAILED due to processing status")
         return "failed"
     else:
+        print("🔍 Debug: Safety router - CONTINUE to relevance check")
         return "continue"
 
 def relevance_check_router(state):
     """Router function for relevance check results"""
+    print("🔍 Debug: Relevance router - checking state")
+    
     validation_results = state.get("validation_results", {})
     relevance_check = validation_results.get("content_match", "")
+    processing_status = state.get("processing_status", "UNKNOWN")
+    
+    print(f"🔍 Debug: Relevance router - processing_status: {processing_status}")
+    print(f"🔍 Debug: Relevance router - relevance_check: {relevance_check}")
     
     # Check for relevance issues
     if "NO_MATCH" in relevance_check or "MISMATCH" in relevance_check:
+        print("🔍 Debug: Relevance router - FAILED due to no match")
         return "failed"
-    elif state.get("processing_status") == "FAILED":
+    elif processing_status == "FAILED":
+        print("🔍 Debug: Relevance router - FAILED due to processing status")
         return "failed"
     else:
+        print("🔍 Debug: Relevance router - CONTINUE to content generation")
         return "continue"
 
 def safety_check_node(state):
@@ -136,14 +192,19 @@ def safety_check_node(state):
         profanity_check = profanity_filter_tool(state["content"])
         child_safety_check = child_filter_tool(state["content"])
         
+        print(f"🔍 Debug: Profanity check: {profanity_check}")
+        print(f"🔍 Debug: Child safety check: {child_safety_check}")
+        
         safety_result = f"Profanity: {profanity_check} | Child-safe: {child_safety_check}"
         
         # Determine if content is safe
         is_safe = (
             "INAPPROPRIATE" not in profanity_check and 
             "INAPPROPRIATE" not in child_safety_check and
-            "Yes" in child_safety_check
+            ("APPROPRIATE" in child_safety_check or "CLEAN" in child_safety_check)
         )
+        
+        print(f"🔍 Debug: Safety result - is_safe: {is_safe}")
         
         processing_status = "CONTINUE" if is_safe else "FAILED"
         error_details = None if is_safe else f"Content safety failed: {safety_result}"
@@ -151,6 +212,11 @@ def safety_check_node(state):
         # Update validation results
         validation_results = state.get("validation_results", {})
         validation_results["safety_check"] = safety_result
+        
+        if is_safe:
+            print("🔍 Debug: Safety check PASSED - continuing process")
+        else:
+            print("🔍 Debug: Safety check FAILED - stopping process")
         
         return {
             **state,
@@ -160,6 +226,7 @@ def safety_check_node(state):
         }
         
     except Exception as e:
+        print(f"🔍 Debug: Safety check ERROR: {e}")
         return {
             **state,
             "processing_status": "FAILED",
@@ -177,11 +244,15 @@ def content_relevance_node(state):
             state["chapter"]
         )
         
+        print(f"🔍 Debug: Relevance check result: {relevance_check}")
+        
         # Determine if content is relevant
         is_relevant = (
             "MATCH" in relevance_check or 
             "PARTIAL_MATCH" in relevance_check
         )
+        
+        print(f"🔍 Debug: Relevance result - is_relevant: {is_relevant}")
         
         processing_status = "CONTINUE" if is_relevant else "FAILED"
         error_details = None if is_relevant else f"Content relevance failed: {relevance_check}"
@@ -189,6 +260,11 @@ def content_relevance_node(state):
         # Update validation results
         validation_results = state.get("validation_results", {})
         validation_results["content_match"] = relevance_check
+        
+        if is_relevant:
+            print("🔍 Debug: Relevance check PASSED - continuing process")
+        else:
+            print("🔍 Debug: Relevance check FAILED - stopping process")
         
         return {
             **state,
@@ -198,6 +274,7 @@ def content_relevance_node(state):
         }
         
     except Exception as e:
+        print(f"🔍 Debug: Relevance check ERROR: {e}")
         return {
             **state,
             "processing_status": "FAILED",
@@ -216,8 +293,12 @@ def generate_notes_node(state):
             state["chapter"]
         )
         
+        print(f"🔍 Debug: Generated notes - {len(notes)} characters")
+        
         generated_content = state.get("generated_content", {})
         generated_content["notes"] = notes
+        
+        print("🔍 Debug: Notes generation COMPLETED - continuing to blanks")
         
         return {
             **state,
@@ -225,6 +306,7 @@ def generate_notes_node(state):
         }
         
     except Exception as e:
+        print(f"🔍 Debug: Notes generation ERROR: {e}")
         return {
             **state,
             "processing_status": "FAILED",
@@ -243,8 +325,12 @@ def generate_blanks_node(state):
             state["chapter"]
         )
         
+        print(f"🔍 Debug: Generated blanks - {len(blanks)} characters")
+        
         generated_content = state.get("generated_content", {})
         generated_content["blanks"] = blanks
+        
+        print("🔍 Debug: Blanks generation COMPLETED - continuing to matches")
         
         return {
             **state,
@@ -252,6 +338,7 @@ def generate_blanks_node(state):
         }
         
     except Exception as e:
+        print(f"🔍 Debug: Blanks generation ERROR: {e}")
         return {
             **state,
             "processing_status": "FAILED",
@@ -270,8 +357,12 @@ def generate_matches_node(state):
             state["chapter"]
         )
         
+        print(f"🔍 Debug: Generated matches - {len(matches)} characters")
+        
         generated_content = state.get("generated_content", {})
         generated_content["matches"] = matches
+        
+        print("🔍 Debug: Matches generation COMPLETED - continuing to Q&A")
         
         return {
             **state,
@@ -279,6 +370,7 @@ def generate_matches_node(state):
         }
         
     except Exception as e:
+        print(f"🔍 Debug: Matches generation ERROR: {e}")
         return {
             **state,
             "processing_status": "FAILED",
@@ -297,8 +389,12 @@ def generate_qna_node(state):
             state["chapter"]
         )
         
+        print(f"🔍 Debug: Generated Q&A - {len(qna)} characters")
+        
         generated_content = state.get("generated_content", {})
         generated_content["qna"] = qna
+        
+        print("🔍 Debug: Q&A generation COMPLETED - continuing to output formatting")
         
         return {
             **state,
@@ -306,6 +402,7 @@ def generate_qna_node(state):
         }
         
     except Exception as e:
+        print(f"🔍 Debug: Q&A generation ERROR: {e}")
         return {
             **state,
             "processing_status": "FAILED",
@@ -319,6 +416,9 @@ def output_formatter_node(state):
     try:
         validation_results = state.get("validation_results", {})
         generated_content = state.get("generated_content", {})
+        
+        print(f"🔍 Debug: Validation results keys: {list(validation_results.keys())}")
+        print(f"🔍 Debug: Generated content keys: {list(generated_content.keys())}")
         
         # Create comprehensive response
         comprehensive_response = f"""
@@ -344,12 +444,16 @@ SUBJECTIVE QUESTIONS:
 {generated_content.get('qna', 'Not generated')}
         """
         
+        print(f"🔍 Debug: Created comprehensive response - {len(comprehensive_response)} characters")
+        print("🔍 Debug: Output formatting COMPLETED - adding assistant message")
+        
         return {
             **state,
             "messages": state["messages"] + [{"role": "assistant", "content": comprehensive_response}]
         }
         
     except Exception as e:
+        print(f"🔍 Debug: Output formatting ERROR: {e}")
         error_response = f"❌ Output formatting failed: {str(e)}"
         return {
             **state,

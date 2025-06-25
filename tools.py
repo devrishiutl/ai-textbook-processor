@@ -886,18 +886,65 @@ Content: {content_source}
 def format_educational_output_tool(result):
     """Educational output formatting tool"""
     
-    if not result or 'messages' not in result:
-        return "No educational content generated."
+    if not result:
+        return "No educational content generated - result is None."
     
-    # Extract the assistant's response
+    if 'messages' not in result:
+        return f"No messages found in result. Available keys: {list(result.keys()) if isinstance(result, dict) else 'Not a dictionary'}"
+    
+    messages = result['messages']
+    if not messages:
+        return "No messages in the messages list."
+    
+    print(f"🔍 Debug: Found {len(messages)} messages")
+    
+    # Extract the assistant's response - handle both dict and BaseMessage formats
     assistant_response = None
-    for message in result['messages']:
-        if message.get('role') == 'assistant':
-            assistant_response = message.get('content', '')
+    for i, message in enumerate(messages):
+        print(f"🔍 Debug: Message {i} type: {type(message)}")
+        
+        # Handle dictionary format
+        if isinstance(message, dict):
+            role = message.get('role')
+            content = message.get('content', '')
+            print(f"🔍 Debug: Dict message role: {role}")
+        else:
+            # Handle LangChain BaseMessage format
+            try:
+                role = getattr(message, 'type', None) or getattr(message, 'role', None)
+                content = getattr(message, 'content', '') or str(message)
+                print(f"🔍 Debug: BaseMessage role: {role}")
+                
+                # For LangChain messages, check if it's an AIMessage (assistant)
+                if hasattr(message, '__class__'):
+                    class_name = message.__class__.__name__
+                    print(f"🔍 Debug: Message class: {class_name}")
+                    if 'AI' in class_name or 'Assistant' in class_name:
+                        role = 'assistant'
+            except Exception as e:
+                print(f"🔍 Debug: Error processing message {i}: {e}")
+                continue
+        
+        if role == 'assistant' and content:
+            assistant_response = content
+            print(f"🔍 Debug: Found assistant response with {len(content)} characters")
             break
     
     if not assistant_response:
-        return "No educational content found in response."
+        # Try to get the last message regardless of role
+        if messages:
+            last_message = messages[-1]
+            if isinstance(last_message, dict):
+                assistant_response = last_message.get('content', '')
+            else:
+                assistant_response = getattr(last_message, 'content', '') or str(last_message)
+            
+            if assistant_response:
+                print(f"🔍 Debug: Using last message as fallback with {len(assistant_response)} characters")
+            else:
+                return f"No educational content found in response. Last message: {str(last_message)[:200]}..."
+        else:
+            return "No educational content found in response - no messages available."
     
     # Clean up and format the response
     formatted_output = []
@@ -917,6 +964,10 @@ def format_educational_output_tool(result):
             
         elif section.startswith('CONTENT SAFETY ANALYSIS:'):
             formatted_output.append("\n🔒 CONTENT SAFETY ANALYSIS")
+            formatted_output.append("=" * 50)
+            
+        elif section.startswith('CONTENT RELEVANCE CHECK:'):
+            formatted_output.append("\n🎯 CONTENT RELEVANCE CHECK")
             formatted_output.append("=" * 50)
             
         elif section.startswith('COMPREHENSIVE STUDY NOTES:'):
@@ -942,5 +993,8 @@ def format_educational_output_tool(result):
                 'Fill-in-the-Blanks:', 'Match-the-Following:', 'Subjective Questions:'
             ]):
                 formatted_output.append(section)
+    
+    if not formatted_output:
+        return f"No formatted content generated. Raw response preview:\n{assistant_response[:500]}..."
     
     return "\n".join(formatted_output)
