@@ -1,0 +1,34 @@
+# Ignore logs and system files
+*.log
+.DS_Store
+
+# Ignore virtual environments
+.venv/
+env/
+venv/
+env_*/
+
+# Ignore VSCode and IDE settings
+.vscode/
+.idea/
+
+# Ignore private keys and env configs
+.env
+.env.*
+
+# Ignore binary/image/media files
+*.pdf
+*.jpg
+*.jpeg
+*.png
+*.gif
+
+# Ignore temporary folders
+build/
+dist/
+__pycache__/
+.cache/
+
+# Ignore notebooks if not used
+*.ipynb
+.ipynb_checkpoints/
