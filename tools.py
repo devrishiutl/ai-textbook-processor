@@ -1121,3 +1121,131 @@ def format_educational_output_tool(result):
         return f"No formatted content generated. Raw response preview:\n{assistant_response[:500]}..."
     
     return "\n".join(formatted_output)
+
+def comprehensive_validation_tool(content, target_standard, subject, chapter):
+    """Single comprehensive validation check for grade, safety, and relevance"""
+    
+    # Extract grade number for validation
+    grade_match = re.search(r'(\d+)', target_standard)
+    if not grade_match:
+        return {
+            "status": "FAILED",
+            "reason": "Invalid grade format",
+            "grade_check": "ERROR: Could not extract grade number",
+            "safety_check": "SKIPPED",
+            "relevance_check": "SKIPPED"
+        }
+    
+    target_grade = int(grade_match.group(1))
+    
+    # Get grade standards for context
+    if target_grade not in grade_validator.standards:
+        return {
+            "status": "FAILED", 
+            "reason": "Unsupported grade",
+            "grade_check": f"ERROR: Grade {target_grade} not supported",
+            "safety_check": "SKIPPED",
+            "relevance_check": "SKIPPED"
+        }
+    
+    standards = grade_validator.standards[target_grade]
+    
+    # Create comprehensive validation prompt
+    validation_prompt = f"""COMPREHENSIVE CONTENT VALIDATION
+
+TARGET: {target_standard} ({standards.age_range})
+SUBJECT: {subject}
+CHAPTER: {chapter}
+
+VALIDATION REQUIREMENTS:
+1. GRADE APPROPRIATENESS: Is content suitable for {target_standard} students?
+   - Vocabulary level: {standards.vocabulary_level}
+   - Sentence complexity: {standards.sentence_length}
+   - Concept difficulty: {standards.concept_complexity}
+
+2. SAFETY CHECK: Is content safe for children?
+   - No violence, inappropriate themes, or mature content
+   - Age-appropriate language and concepts
+
+3. RELEVANCE CHECK: Does content match the subject and chapter?
+   - Subject: {subject}
+   - Chapter: {chapter}
+   - Content should be relevant to this specific topic
+
+CONTENT TO VALIDATE:
+{content}
+
+REQUIRED RESPONSE FORMAT (EXACTLY):
+GRADE_CHECK: [PASS/FAIL]
+SAFETY_CHECK: [PASS/FAIL] 
+RELEVANCE_CHECK: [PASS/FAIL]
+OVERALL_STATUS: [PASS/FAIL]
+REASON: [Brief explanation if any check failed]
+
+VALIDATION RULES:
+- GRADE_CHECK: PASS only if content is specifically appropriate for {target_standard} (be strict about grade level)
+  * Class 1-2: Very simple vocabulary, 3-8 words per sentence, concrete concepts only
+  * Class 3-4: Basic vocabulary, 6-12 words per sentence, simple processes
+  * Class 5-6: Moderate vocabulary, 10-18 words per sentence, some abstract concepts
+  * Class 7-8: Advanced vocabulary, 15-25 words per sentence, complex concepts
+  * Class 9-12: Sophisticated vocabulary, 20+ words per sentence, theoretical concepts
+- SAFETY_CHECK: PASS if content is safe for children (ignore subject relevance)
+- RELEVANCE_CHECK: PASS if content matches {subject} and {chapter}
+- OVERALL_STATUS: PASS only if ALL three checks pass
+- REASON: Only provide if OVERALL_STATUS is FAIL
+
+STRICT GRADE ASSESSMENT:
+- If content seems designed for 2+ grades higher → FAIL
+- If content seems designed for 2+ grades lower → FAIL
+- Only PASS if content is specifically appropriate for {target_standard}
+
+EXAMPLE RESPONSES:
+✓ All Pass: "GRADE_CHECK: PASS\nSAFETY_CHECK: PASS\nRELEVANCE_CHECK: PASS\nOVERALL_STATUS: PASS\nREASON: All validations passed"
+
+✗ Grade Fail: "GRADE_CHECK: FAIL\nSAFETY_CHECK: PASS\nRELEVANCE_CHECK: PASS\nOVERALL_STATUS: FAIL\nREASON: Content designed for Class 6 is too advanced for {target_standard}"
+
+✗ Relevance Fail: "GRADE_CHECK: PASS\nSAFETY_CHECK: PASS\nRELEVANCE_CHECK: FAIL\nOVERALL_STATUS: FAIL\nREASON: Science content doesn't match {subject} subject"
+
+✗ Grade Too Simple: "GRADE_CHECK: FAIL\nSAFETY_CHECK: PASS\nRELEVANCE_CHECK: PASS\nOVERALL_STATUS: FAIL\nREASON: Content designed for lower grades is too simple for {target_standard}"
+"""
+
+    try:
+        # Single AI call for all validations
+        ai_response = call_gpt(validation_prompt, "")
+        
+        # Parse the structured response
+        result = {
+            "status": "FAILED",
+            "reason": "Parsing error",
+            "grade_check": "UNKNOWN",
+            "safety_check": "UNKNOWN", 
+            "relevance_check": "UNKNOWN"
+        }
+        
+        lines = ai_response.split('\n')
+        for line in lines:
+            line = line.strip()
+            if line.startswith('GRADE_CHECK:'):
+                result["grade_check"] = "PASS" if "PASS" in line else "FAIL"
+            elif line.startswith('SAFETY_CHECK:'):
+                result["safety_check"] = "PASS" if "PASS" in line else "FAIL"
+            elif line.startswith('RELEVANCE_CHECK:'):
+                result["relevance_check"] = "PASS" if "PASS" in line else "FAIL"
+            elif line.startswith('OVERALL_STATUS:'):
+                result["status"] = "PASS" if "PASS" in line else "FAILED"
+            elif line.startswith('REASON:'):
+                result["reason"] = line.replace('REASON:', '').strip()
+        
+        logger.info(f"🔍 Comprehensive Validation: {result['status']} - Grade:{result['grade_check']} Safety:{result['safety_check']} Relevance:{result['relevance_check']}")
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"❌ Comprehensive validation failed: {e}")
+        return {
+            "status": "FAILED",
+            "reason": f"Validation error: {str(e)}",
+            "grade_check": "ERROR",
+            "safety_check": "ERROR",
+            "relevance_check": "ERROR"
+        }

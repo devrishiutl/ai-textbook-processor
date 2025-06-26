@@ -23,9 +23,7 @@ class StructuredContent(BaseModel):
     fillInTheBlanks: FillInTheBlanks
     matchTheFollowing: MatchTheFollowing
     questionAnswer: QuestionAnswer
-    gradeValidation: Optional[str] = None
-    safetyAnalysis: Optional[str] = None
-    relevanceCheck: Optional[str] = None
+    # Removed redundant validation fields - now only in metadata.validation_details
 
 class ProcessResponse(BaseModel):
     """API response model for the processing endpoint"""

@@ -22,20 +22,16 @@ def parse_educational_content(raw_content: str) -> StructuredContent:
     for line in lines:
         line = line.strip()
         
-        # Identify section headers
-        if '🎯 GRADE LEVEL VALIDATION' in line:
-            current_section = 'grade_validation'
-        elif '🔒 CONTENT SAFETY ANALYSIS' in line:
-            current_section = 'safety_analysis'
-        elif '🎯 CONTENT RELEVANCE CHECK' in line:
-            current_section = 'relevance_check'
-        elif '📚 COMPREHENSIVE STUDY NOTES' in line:
+        # Identify section headers (updated for new comprehensive validation format)
+        if 'COMPREHENSIVE VALIDATION RESULTS:' in line:
+            current_section = 'grade_validation'  # Store all validation info here
+        elif 'COMPREHENSIVE STUDY NOTES' in line:  # Remove colon requirement
             current_section = 'study_notes'
-        elif '📝 FILL-IN-THE-BLANKS EXERCISES' in line:
+        elif 'FILL-IN-THE-BLANKS EXERCISES' in line:  # Remove colon requirement
             current_section = 'fill_blanks'
-        elif '🔗 MATCH-THE-FOLLOWING EXERCISES' in line:
+        elif 'MATCH-THE-FOLLOWING EXERCISES' in line:  # Remove colon requirement
             current_section = 'match_following'
-        elif '❓ SUBJECTIVE QUESTIONS' in line:
+        elif 'SUBJECTIVE QUESTIONS' in line:  # Remove colon requirement
             current_section = 'questions'
         elif line.startswith('='):
             continue  # Skip separator lines
@@ -51,14 +47,30 @@ def parse_educational_content(raw_content: str) -> StructuredContent:
     # Parse Questions and Answers
     qa_data = parse_questions_answers(sections['questions'])
     
+    # Parse comprehensive validation results
+    validation_text = sections['grade_validation'].strip()
+    grade_validation = ""
+    safety_analysis = ""
+    relevance_check = ""
+    
+    # Extract individual validation results from comprehensive format
+    if validation_text:
+        lines = validation_text.split('\n')
+        for line in lines:
+            line = line.strip()
+            if line.startswith('Grade Check:'):
+                grade_validation = line.replace('Grade Check:', '').strip()
+            elif line.startswith('Safety Check:'):
+                safety_analysis = line.replace('Safety Check:', '').strip()
+            elif line.startswith('Relevance Check:'):
+                relevance_check = line.replace('Relevance Check:', '').strip()
+    
     return StructuredContent(
         importantNotes=sections['study_notes'].strip(),
         fillInTheBlanks=fill_blanks_data,
         matchTheFollowing=match_following_data,
-        questionAnswer=qa_data,
-        gradeValidation=sections['grade_validation'].strip(),
-        safetyAnalysis=sections['safety_analysis'].strip(),
-        relevanceCheck=sections['relevance_check'].strip()
+        questionAnswer=qa_data
+        # Validation details now only in metadata.validation_details
     )
 
 def parse_fill_in_blanks(content: str) -> FillInTheBlanks:
