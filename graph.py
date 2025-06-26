@@ -9,10 +9,7 @@ import logging
 logger = logging.getLogger(__name__)
 from tools import (
     combined_validation_tool,
-    generate_notes_tool,
-    generate_qna_tool,
-    generate_blanks_tool,
-    generate_match_tool
+    generate_all_content_tool
 )
 
 class AgentState(TypedDict):
@@ -132,68 +129,36 @@ def content_normalization_node(state):
     """Pass-through node"""
     return {**state, "original_content": state["content"]}
 
-def generate_notes_node(state):
-    """Generate study notes"""
+def generate_all_content_node(state):
+    """Generate all educational content in one LLM call"""
     try:
-        notes = generate_notes_tool(state["content"], state["standard"], state["subject"], state["chapter"])
-        generated_content = state.get("generated_content", {})
-        generated_content["notes"] = notes
+        # Generate all content at once
+        all_content = generate_all_content_tool(
+            state["content"], 
+            state["standard"], 
+            state["subject"], 
+            state["chapter"]
+        )
         
-        return {**state, "generated_content": generated_content}
-        
-    except Exception as e:
-        return {
-            **state,
-            "processing_status": "FAILED",
-            "error_details": f"Notes generation error: {str(e)}"
+        # Store the raw content directly - let the formatter handle parsing
+        generated_content = {
+            "notes": all_content,  # Store raw content
+            "blanks": all_content,  # Store raw content
+            "matches": all_content,  # Store raw content
+            "qna": all_content  # Store raw content
         }
-
-def generate_blanks_node(state):
-    """Generate fill-in-blanks"""
-    try:
-        blanks = generate_blanks_tool(state["content"], state["standard"], state["subject"], state["chapter"])
-        generated_content = state.get("generated_content", {})
-        generated_content["blanks"] = blanks
         
-        return {**state, "generated_content": generated_content}
-        
-    except Exception as e:
         return {
-            **state,
-            "processing_status": "FAILED",
-            "error_details": f"Blanks generation error: {str(e)}"
+            **state, 
+            "generated_content": generated_content,
+            "processing_status": "CONTINUE"
         }
-
-def generate_matches_node(state):
-    """Generate match-the-following"""
-    try:
-        matches = generate_match_tool(state["content"], state["standard"], state["subject"], state["chapter"])
-        generated_content = state.get("generated_content", {})
-        generated_content["matches"] = matches
-        
-        return {**state, "generated_content": generated_content}
         
     except Exception as e:
         return {
             **state,
             "processing_status": "FAILED",
-            "error_details": f"Matches generation error: {str(e)}"
-        }
-
-def generate_qna_node(state):
-    """Generate Q&A"""
-    try:
-        qna = generate_qna_tool(state["content"], state["standard"], state["subject"], state["chapter"])
-        generated_content = state.get("generated_content", {})
-        generated_content["qna"] = qna
-        
-        return {**state, "generated_content": generated_content}
-        
-    except Exception as e:
-        return {
-            **state,
-            "processing_status": "FAILED",
-            "error_details": f"QNA generation error: {str(e)}"
+            "error_details": f"Content generation error: {str(e)}"
         }
 
 def output_formatter_node(state):
@@ -202,6 +167,9 @@ def output_formatter_node(state):
         validation_results = state.get("validation_results", {})
         generated_content = state.get("generated_content", {})
         
+        # Use the raw generated content directly
+        raw_content = generated_content.get('notes', 'Not generated')
+        
         comprehensive_response = f"""
 COMPREHENSIVE VALIDATION RESULTS:
 Grade Check: {validation_results.get('grade_check', 'Not performed')}
@@ -209,17 +177,7 @@ Safety Check: {validation_results.get('safety_check', 'Not performed')}
 Relevance Check: {validation_results.get('relevance_check', 'Not performed')}
 Overall Status: {validation_results.get('status', 'Unknown')}
 
-COMPREHENSIVE STUDY NOTES:
-{generated_content.get('notes', 'Not generated')}
-
-FILL-IN-THE-BLANKS EXERCISES:
-{generated_content.get('blanks', 'Not generated')}
-
-MATCH-THE-FOLLOWING EXERCISES:
-{generated_content.get('matches', 'Not generated')}
-
-SUBJECTIVE QUESTIONS:
-{generated_content.get('qna', 'Not generated')}
+{raw_content}
         """
         
         return {
@@ -238,19 +196,14 @@ def build_graph():
     """Build processing graph"""
     graph = StateGraph(AgentState)
     
-    # Add nodes
-    graph.add_node("extract_content", content_extraction_node)
+    # Add nodes - removed content_extraction_node as it's unnecessary
     graph.add_node("comprehensive_validation", comprehensive_validation_node)
     graph.add_node("normalize_content", content_normalization_node)
-    graph.add_node("generate_notes", generate_notes_node)
-    graph.add_node("generate_blanks", generate_blanks_node)
-    graph.add_node("generate_matches", generate_matches_node)
-    graph.add_node("generate_qna", generate_qna_node)
+    graph.add_node("generate_all_content", generate_all_content_node)
     graph.add_node("format_output", output_formatter_node)
     
-    # Define flow
-    graph.set_entry_point("extract_content")
-    graph.add_edge("extract_content", "comprehensive_validation")
+    # Define flow - start directly with validation
+    graph.set_entry_point("comprehensive_validation")
     
     graph.add_conditional_edges(
         "comprehensive_validation",
@@ -261,11 +214,8 @@ def build_graph():
         }
     )
     
-    graph.add_edge("normalize_content", "generate_notes")
-    graph.add_edge("generate_notes", "generate_blanks")
-    graph.add_edge("generate_blanks", "generate_matches")
-    graph.add_edge("generate_matches", "generate_qna")
-    graph.add_edge("generate_qna", "format_output")
+    graph.add_edge("normalize_content", "generate_all_content")
+    graph.add_edge("generate_all_content", "format_output")
     graph.add_edge("format_output", END)
     
     return graph.compile()

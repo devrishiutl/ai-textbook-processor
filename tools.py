@@ -60,7 +60,8 @@ def extract_pdf_content(pdf_path):
 def vision_understand_tool(images, standard, subject, chapter):
     """Process images with vision AI"""
     try:
-        user_content = [{"type": "text", "text": f"Extract educational content for {standard} {subject} - {chapter}"}]
+        # Fixed prompt: Extract ACTUAL content from images, not generate based on subject/chapter
+        user_content = [{"type": "text", "text": "Extract all educational content from these images. Describe exactly what you see - text, diagrams, concepts, topics, etc. Do not generate new content, only describe what is actually present in the images."}]
         
         for img_path in images:
             encoded = encode_image_base64(img_path)
@@ -75,12 +76,13 @@ def vision_understand_tool(images, standard, subject, chapter):
         response = azure_client.chat.completions.create(
             model=AZURE_DEPLOYMENT_NAME,
             messages=[
-                {"role": "system", "content": f"Educational content analyzer for {standard} {subject}"},
+                {"role": "system", "content": "You are an educational content extractor. Extract and describe only the actual content present in the images."},
                 {"role": "user", "content": user_content}
             ],
             temperature=0.1,
-            max_tokens=1500
+            max_tokens=3000  # Increased for comprehensive content extraction from multiple images
         )
+        
         return response.choices[0].message.content
     except Exception as e:
         return f"ERROR: {str(e)}"
@@ -137,7 +139,7 @@ REASON: [Brief explanation if any check fails]"""
             result["overall_status"] = "PASSED"
         else:
             result["overall_status"] = "FAILED"
-            
+        
     except Exception as e:
         result["reason"] = f"Error parsing validation response: {str(e)}"
     
@@ -150,43 +152,59 @@ REASON: [Brief explanation if any check fails]"""
 # 4. CONTENT GENERATION FUNCTIONS (Called by graph nodes)
 # =============================================================================
 
-def generate_notes_tool(text, grade_level, subject, chapter): 
-    """Generate study notes"""
-    prompt = f"Create concise study notes for {grade_level} students on {subject} - {chapter}. Focus on key concepts and important points."
-    return call_gpt(prompt, text)
+def generate_all_content_tool(text, grade_level, subject, chapter):
+    """Generate all educational content in one LLM call"""
+    prompt = f"""Based on the following educational content, create comprehensive study materials for {grade_level} students.
 
-def generate_blanks_tool(text, grade_level, subject, chapter):
-    """Generate fill-in-blanks"""
-    prompt = f"Create 5 fill-in-the-blank questions for {grade_level} students on {subject} - {chapter}. Format: '1. Sentence with ___ blank\nAnswer: missing word'"
-    return call_gpt(prompt, text)
+Use ONLY the content provided below. Do not add information that is not present in the source material.
 
-def generate_match_tool(text, grade_level, subject, chapter):
-    """Generate match exercises with enforced format"""
-    prompt = f"""Create 5 match-the-following pairs for {grade_level} students on {subject} - {chapter}.
+You MUST generate ALL four sections below. DO NOT skip any section. Each section must be complete with actual content.
 
-You MUST use this EXACT format (copy exactly):
+STUDY NOTES:
+[Write detailed study notes with bullet points covering key concepts from the provided content]
 
-Column A: 1.Science 2.Observation 3.Experiment 4.Hypothesis 5.Discovery
-Column B: A.Study of natural world B.Watching carefully C.Testing ideas D.Educated guess E.Finding new things
-Answers: 1-A,2-B,3-C,4-D,5-E
+FILL-IN-THE-BLANKS:
+1. [Create a sentence with _______ blank from the provided content]
+2. [Create a sentence with _______ blank from the provided content]
+3. [Create a sentence with _______ blank from the provided content]
+4. [Create a sentence with _______ blank from the provided content]
+5. [Create a sentence with _______ blank from the provided content]
 
-Replace the example items with content from the text, but keep the EXACT same format structure."""
+ANSWERS:
+1. [Provide the missing word for question 1]
+2. [Provide the missing word for question 2]
+3. [Provide the missing word for question 3]
+4. [Provide the missing word for question 4]
+5. [Provide the missing word for question 5]
+
+MATCH-THE-FOLLOWING EXERCISES:
+Column A: 1.[Term from content] 2.[Term from content] 3.[Term from content] 4.[Term from content] 5.[Term from content]
+Column B: A.[Definition from content] B.[Definition from content] C.[Definition from content] D.[Definition from content] E.[Definition from content]
+Answers: 1-[Letter], 2-[Letter], 3-[Letter], 4-[Letter], 5-[Letter]
+
+SUBJECTIVE QUESTIONS:
+Q1: [Write a thoughtful question about the provided content]
+Q2: [Write a thoughtful question about the provided content]
+Q3: [Write a thoughtful question about the provided content]
+
+ANSWERS:
+Q1: [Write a complete answer to question 1 based on the content]
+Q2: [Write a complete answer to question 2 based on the content]
+Q3: [Write a complete answer to question 3 based on the content]
+
+CRITICAL: You must fill in ALL sections completely using ONLY the provided content. Do not generate content for {subject} - {chapter} if it's not present in the source material."""
     
-    result = call_gpt(prompt, text)
+    result = call_gpt(prompt, text, max_tokens=3000)  # Increased for comprehensive content
     
-    # If the result doesn't contain the expected format, create a fallback
-    if "Column A:" not in result or "Column B:" not in result:
-        # Create a basic match exercise from the content
-        result = f"""Column A: 1.Science 2.Observation 3.Experiment 4.Question 5.Discovery
-Column B: A.Study of natural world B.Watching carefully to learn C.Testing ideas and hypotheses D.Asking about surroundings E.Finding something new
-Answers: 1-A,2-B,3-C,4-D,5-E"""
+    # Validate that all sections are present
+    required_sections = ["STUDY NOTES:", "FILL-IN-THE-BLANKS:", "MATCH-THE-FOLLOWING EXERCISES:", "SUBJECTIVE QUESTIONS:"]
+    missing_sections = [section for section in required_sections if section not in result]
+    
+    if missing_sections:
+        # Log missing sections for debugging
+        logger.warning(f"Missing sections in generated content: {missing_sections}")
     
     return result
-
-def generate_qna_tool(text, grade_level, subject, chapter):
-    """Generate Q&A"""
-    prompt = f"Create 3 questions and answers for {grade_level} students on {subject} - {chapter}. Format: 'Q1: question\nA1: answer'"
-    return call_gpt(prompt, text)
 
 # =============================================================================
 # 5. MAIN PROCESSING FUNCTION (Entry point from main.py)
