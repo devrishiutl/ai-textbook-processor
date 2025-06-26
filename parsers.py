@@ -78,9 +78,9 @@ def parse_fill_in_blanks(content: str) -> FillInTheBlanks:
     questions = {}
     answers = {}
     
-    # Pattern: 1. Question text with ________.
-    #          **Answer:** answer_text
-    pattern = r'(\d+)\.\s*(.*?)\s*\n\s*\*\*Answer:\*\*\s*(.*?)(?=\n\d+\.|\n\n|$)'
+    # New simplified pattern: 1. Question text with ________ blank
+    #                        Answer: word
+    pattern = r'(\d+)\.\s*(.*?)\s*\n\s*Answer:\s*(.*?)(?=\n\d+\.|\n\n|$)'
     matches = re.findall(pattern, content, re.DOTALL)
     
     for match in matches:
@@ -97,34 +97,33 @@ def parse_match_following(content: str) -> MatchTheFollowing:
     answers = {}
     
     lines = content.split('\n')
-    current_column = None
     
     for line in lines:
         line = line.strip()
         
-        if 'Column A:' in line:
-            current_column = 'A'
-        elif 'Column B:' in line:
-            current_column = 'B'
-        elif '**Answers:**' in line:
-            current_column = 'answers'
-        elif current_column == 'A' and re.match(r'^\d+\.', line):
-            # Pattern: 1. Text
-            match = re.match(r'^(\d+)\.\s*(.*)', line)
-            if match:
-                column_a[match.group(1)] = match.group(2)
-        elif current_column == 'B' and re.match(r'^[A-Z]\.', line):
-            # Pattern: A. Text
-            match = re.match(r'^([A-Z])\.\s*(.*)', line)
-            if match:
-                column_b[match.group(1)] = match.group(2)
-        elif current_column == 'answers' and ' - ' in line:
-            # Pattern: 1 - C, 2 - D, 3 - B
-            parts = line.split(', ')
-            for part in parts:
-                if ' - ' in part:
-                    num, letter = part.split(' - ')
-                    answers[num.strip()] = letter.strip()
+        # New simplified format: Column A: 1. Item1  2. Item2  3. Item3  4. Item4  5. Item5
+        if line.startswith('Column A:'):
+            # Extract items after "Column A:"
+            items_text = line.replace('Column A:', '').strip()
+            # Pattern: 1. Item1  2. Item2  etc.
+            items = re.findall(r'(\d+)\.\s*([^0-9]+?)(?=\s*\d+\.|$)', items_text)
+            for num, item in items:
+                column_a[num] = item.strip()
+                
+        elif line.startswith('Column B:'):
+            # Extract items after "Column B:"
+            items_text = line.replace('Column B:', '').strip()
+            # Pattern: A. Match1  B. Match2  etc.
+            items = re.findall(r'([A-Z])\.\s*([^A-Z]+?)(?=\s*[A-Z]\.|$)', items_text)
+            for letter, item in items:
+                column_b[letter] = item.strip()
+                
+        elif line.startswith('Answers:'):
+            # Extract answers: 1-A, 2-B, 3-C, 4-D, 5-E
+            answers_text = line.replace('Answers:', '').strip()
+            pairs = re.findall(r'(\d+)-([A-Z])', answers_text)
+            for num, letter in pairs:
+                answers[num] = letter
     
     return MatchTheFollowing(column_a=column_a, column_b=column_b, answers=answers)
 
@@ -133,9 +132,9 @@ def parse_questions_answers(content: str) -> QuestionAnswer:
     questions = {}
     answers = {}
     
-    # Pattern: **Question 1:** Question text
-    #          **Answer:** Answer text
-    pattern = r'\*\*Question\s*(\d+):\*\*\s*(.*?)\s*\*\*Answer:\*\*\s*(.*?)(?=\*\*Question|\Z)'
+    # New simplified pattern: Q1: [question]
+    #                        A1: [answer]
+    pattern = r'Q(\d+):\s*(.*?)\s*A\1:\s*(.*?)(?=Q\d+:|$)'
     matches = re.findall(pattern, content, re.DOTALL)
     
     for match in matches:

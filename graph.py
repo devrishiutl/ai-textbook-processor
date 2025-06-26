@@ -8,16 +8,13 @@ import logging
 # Create logger for this module
 logger = logging.getLogger(__name__)
 from tools import (
-    profanity_filter_tool,
     child_filter_tool,
     content_match_tool,
     generate_notes_tool,
     generate_qna_tool,
     generate_blanks_tool,
     generate_match_tool,
-    vision_understand_tool,
-    grade_level_check_tool,
-    comprehensive_validation_tool
+    grade_level_check_tool
 )
 
 class AgentState(TypedDict):
@@ -86,30 +83,81 @@ def comprehensive_validation_node(state):
     logger.info(f"🔍 Validation Params: standard='{state.get('standard')}', subject='{state.get('subject')}', chapter='{state.get('chapter')}'")
     
     try:
-        validation_result = comprehensive_validation_tool(
+        # Use the strict grade validation with forbidden terms checking
+        grade_validation_result = grade_level_check_tool(
             state["content"], 
             state["standard"], 
             state["subject"], 
             state["chapter"]
         )
         
-        logger.info(f"📊 Validation Result: {validation_result['status']}")
+        logger.info(f"📊 Grade Validation Result: {grade_validation_result[:100]}...")
         
-        if validation_result["status"] == "PASS":
-            logger.info("✅ All validations PASSED - continuing to content generation")
-            return {
-                **state,
-                "processing_status": "CONTINUE",
-                "validation_results": validation_result
-            }
-        else:
-            logger.info(f"❌ Validation FAILED: {validation_result['reason']}")
+        # Check if grade validation failed
+        if "TOO ADVANCED" in grade_validation_result or "TOO SIMPLE" in grade_validation_result:
+            logger.info(f"❌ Grade validation FAILED: {grade_validation_result}")
             return {
                 **state,
                 "processing_status": "FAILED",
-                "validation_results": validation_result,
-                "error_details": f"Validation failed: {validation_result['reason']}"
+                "validation_results": {
+                    "grade_check": "FAIL",
+                    "safety_check": "NOT_CHECKED",
+                    "relevance_check": "NOT_CHECKED",
+                    "status": "FAILED",
+                    "reason": grade_validation_result
+                },
+                "error_details": f"Grade validation failed: {grade_validation_result}"
             }
+        
+        # If grade validation passes, do quick safety and relevance checks
+        safety_result = child_filter_tool(state["content"])
+        relevance_result = content_match_tool(state["content"], state["subject"], state["chapter"])
+        
+        # Check safety
+        if "INAPPROPRIATE" in safety_result:
+            logger.info(f"❌ Safety validation FAILED: {safety_result}")
+            return {
+                **state,
+                "processing_status": "FAILED",
+                "validation_results": {
+                    "grade_check": "PASS",
+                    "safety_check": "FAIL",
+                    "relevance_check": "NOT_CHECKED",
+                    "status": "FAILED",
+                    "reason": safety_result
+                },
+                "error_details": f"Safety validation failed: {safety_result}"
+            }
+        
+        # Check relevance
+        if "NO_MATCH" in relevance_result:
+            logger.info(f"❌ Relevance validation FAILED: {relevance_result}")
+            return {
+                **state,
+                "processing_status": "FAILED",
+                "validation_results": {
+                    "grade_check": "PASS",
+                    "safety_check": "PASS",
+                    "relevance_check": "FAIL",
+                    "status": "FAILED",
+                    "reason": relevance_result
+                },
+                "error_details": f"Relevance validation failed: {relevance_result}"
+            }
+        
+        # All validations passed
+        logger.info("✅ All validations PASSED - continuing to content generation")
+        return {
+            **state,
+            "processing_status": "CONTINUE",
+            "validation_results": {
+                "grade_check": "PASS",
+                "safety_check": "PASS",
+                "relevance_check": "PASS",
+                "status": "PASS",
+                "reason": "All validations passed"
+            }
+        }
         
     except Exception as e:
         logger.error(f"❌ Comprehensive validation ERROR: {e}")
@@ -136,48 +184,14 @@ def validation_router(state):
 # Removed old validation nodes - now using single comprehensive validation
 
 def content_normalization_node(state):
-    """Normalize content for processing after validation passes"""
-    logger.info("🔧 Step 5: Normalizing Content for Processing...")
+    """Pass-through node - content is already validated and ready for processing"""
+    logger.info("🔧 Step 5: Content Ready for Processing...")
     
-    try:
-        # Import here to avoid circular imports
-        from tools import normalize_content_for_validation
-        
-        # Only normalize PDF content (images are already AI-processed and appropriate)
-        # Check if this came from PDF processing by looking at sentence complexity
-        original_content = state["content"]
-        validation_results = state.get("validation_results", {})
-        grade_check = validation_results.get("grade_check", "")
-        
-        # Check if normalization is needed (long sentences detected)
-        needs_normalization = (
-            "Maximum sentence length" in grade_check and 
-            "exceeds grade level" in grade_check
-        )
-        
-        if needs_normalization:
-            logger.info("🔧 Applying content normalization for processing...")
-            normalized_content = normalize_content_for_validation(original_content, state["standard"])
-            
-            return {
-                **state,
-                "content": normalized_content,  # Use normalized content for generation
-                "original_content": original_content  # Keep original for reference
-            }
-        else:
-            logger.info("🔧 Content normalization not needed - using original content")
-            return {
-                **state,
-                "original_content": original_content  # Keep original for reference
-            }
-            
-    except Exception as e:
-        logger.error(f"🔧 Content normalization ERROR: {e}")
-        # Continue with original content if normalization fails
-        return {
-            **state,
-            "original_content": state["content"]
-        }
+    # Simply pass through the validated content
+    return {
+        **state,
+        "original_content": state["content"]
+    }
 
 def generate_notes_node(state):
     """Generate study notes"""
