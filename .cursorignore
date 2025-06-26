@@ -1,5 +1,5 @@
 # Ignore logs and system files
-*.log
+# *.log
 .DS_Store
 
 # Ignore virtual environments

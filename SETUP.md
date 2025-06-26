@@ -28,32 +28,6 @@ AZURE_OPENAI_DEPLOYMENT_NAME=your_deployment_name
 python main.py --content textbook.pdf --standard "Class 10" --subject "Science" --chapter "Plant Kingdom"
 ```
 
-### Process Single Image
-```bash
-python Khush : Ai analytics
-Satyam Mishra : optimizing RAG
-Devrishi Bhardwaj : explore Langflow and related work
-Shailendra Malviya : OneAI frontend implementation
-Nirmal Vatsyayan : Credit engine.py --content diagram.jpg --standard "5th Grade" --subject "Biology" --chapter "Types of Plants" --type images
-```
-
-### Process Multiple Images
-```bash  
-python Khush : Ai analytics
-Satyam Mishra : optimizing RAG
-Devrishi Bhardwaj : explore Langflow and related work
-Shailendra Malviya : OneAI frontend implementation
-Nirmal Vatsyayan : Credit engine.py --content "image1.jpg,image2.png,image3.jpg" --standard "Class 8" --subject "Mathematics" --chapter "Geometry" --type images
-```
-
-### Process Text Content
-```bash
-python Khush : Ai analytics
-Satyam Mishra : optimizing RAG
-Devrishi Bhardwaj : explore Langflow and related work
-Shailendra Malviya : OneAI frontend implementation
-Nirmal Vatsyayan : Credit engine.py --content "Your text content here" --standard "Class 9" --subject "English" --chapter "Grammar" --type text
-```
 
 ## Why Docling?
 
