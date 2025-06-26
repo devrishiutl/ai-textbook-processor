@@ -1,15 +1,43 @@
+import warnings
+import os
+import logging
+from datetime import datetime
+
+# Suppress PyTorch MPS warnings on Apple Silicon
+warnings.filterwarnings("ignore", message=".*pin_memory.*not supported on MPS.*")
+os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = "0.0"
+
+# Configure logging to file only
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('textbook_processor.log')
+    ]
+)
+
+# Create logger for this module
+logger = logging.getLogger(__name__)
+
+# Suppress generic root logger errors from dependencies
+logging.getLogger("root").setLevel(logging.CRITICAL)
+for noisy_logger in ["torch", "transformers", "docling", "PIL"]:
+    logging.getLogger(noisy_logger).setLevel(logging.WARNING)
+
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-import os
 import tempfile
 import shutil
-from typing import List, Optional
+import re
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 from tools import (
     process_educational_content_tool,
     format_educational_output_tool
 )
+from models import ProcessResponse, StructuredContent
+from parsers import parse_educational_content
 
 # Create FastAPI app
 app = FastAPI(
@@ -23,42 +51,15 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure as needed for production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Pydantic models for request/response
-class ProcessRequest(BaseModel):
-    standard: str
-    subject: str
-    chapter: str
-    content_type: str = "pdf"  # pdf, images, text
+# Models are now imported from models.py
 
-class ProcessResponse(BaseModel):
-    success: bool
-    message: str
-    content: Optional[str] = None
-    error: Optional[str] = None
-    metadata: Optional[dict] = None
-
-class HealthResponse(BaseModel):
-    status: str
-    version: str
-    service: str
-
-# Health check endpoint
-@app.get("/health", response_model=HealthResponse)
-async def health_check():
-    """Health check endpoint"""
-    return HealthResponse(
-        status="healthy",
-        version="1.0.0",
-        service="AI Textbook Processor"
-    )
-
-# Main processing endpoint
+# Main processing endpoint with structured output
 @app.post("/process", response_model=ProcessResponse)
 async def process_educational_content(
     standard: str = Form(..., description="Student standard/grade (e.g., 'Class 10', '5th Grade')"),
@@ -69,18 +70,11 @@ async def process_educational_content(
     text_content: Optional[str] = Form(None, description="Direct text input (if content_type is 'text')")
 ):
     """
-    Process educational content from PDF, images, or text
-    
-    - **standard**: Grade level (e.g., "Class 6", "Grade 8")
-    - **subject**: Subject name (e.g., "Science", "Mathematics")
-    - **chapter**: Chapter or topic name
-    - **content_type**: Type of input ("pdf", "images", "text")
-    - **files**: Upload PDF or image files
-    - **text_content**: Direct text input (alternative to files)
+    Process educational content and return structured JSON response
     """
     
     try:
-        print(f"🚀 Processing request: {subject} | {standard} | {chapter} | {content_type}")
+        logger.info(f"🚀 Processing request: {subject} | {standard} | {chapter} | {content_type}")
         
         # Validate input
         if content_type in ["pdf", "images"] and not files:
@@ -97,7 +91,6 @@ async def process_educational_content(
         
         # Process based on content type
         if content_type == "text":
-            # Direct text processing
             result = process_educational_content_tool(
                 content_source=text_content,
                 standard=standard,
@@ -107,7 +100,6 @@ async def process_educational_content(
             )
             
         elif content_type == "pdf":
-            # Handle PDF upload
             if len(files) != 1:
                 raise HTTPException(
                     status_code=400,
@@ -121,7 +113,6 @@ async def process_educational_content(
                     detail="File must be a PDF"
                 )
             
-            # Save uploaded PDF to temporary file
             with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
                 shutil.copyfileobj(file.file, temp_file)
                 temp_path = temp_file.name
@@ -135,18 +126,15 @@ async def process_educational_content(
                     content_type="pdf"
                 )
             finally:
-                # Cleanup temporary file
                 os.unlink(temp_path)
                 
         elif content_type == "images":
-            # Handle image uploads
             if not files:
                 raise HTTPException(
                     status_code=400,
                     detail="At least one image file is required"
                 )
             
-            # Validate image files
             allowed_extensions = {'.png', '.jpg', '.jpeg', '.gif', '.bmp'}
             temp_paths = []
             
@@ -159,7 +147,6 @@ async def process_educational_content(
                             detail=f"File {file.filename} is not a supported image format"
                         )
                     
-                    # Save to temporary file
                     with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as temp_file:
                         shutil.copyfileobj(file.file, temp_file)
                         temp_paths.append(temp_file.name)
@@ -172,7 +159,6 @@ async def process_educational_content(
                     content_type="images"
                 )
             finally:
-                # Cleanup temporary files
                 for temp_path in temp_paths:
                     try:
                         os.unlink(temp_path)
@@ -186,11 +172,12 @@ async def process_educational_content(
             )
         
         # Check for processing errors
-        if result and result.get('error'):
+        if result and (result.get('error') or result.get('processing_status') == 'FAILED'):
+            error_message = result.get('error') or result.get('error_details') or "Processing validation failed"
             return ProcessResponse(
                 success=False,
                 message="Processing failed",
-                error=result.get('error'),
+                error=error_message,
                 metadata={
                     "standard": standard,
                     "subject": subject,
@@ -199,13 +186,47 @@ async def process_educational_content(
                 }
             )
         
-        # Format the output
-        formatted_output = format_educational_output_tool(result)
+        # Format and parse the output into structured JSON
+        raw_output = format_educational_output_tool(result)
+        structured_content = parse_educational_content(raw_output)
+        
+        # Check if the structured content is empty (validation likely failed)
+        is_content_empty = (
+            not structured_content.importantNotes and
+            not structured_content.fillInTheBlanks.questions and
+            not structured_content.matchTheFollowing.column_a and
+            not structured_content.questionAnswer.questions
+        )
+        
+        if is_content_empty:
+            # Check if we have validation information to provide as error
+            validation_info = []
+            if structured_content.gradeValidation:
+                validation_info.append(f"Grade Validation: {structured_content.gradeValidation[:200]}...")
+            if structured_content.safetyAnalysis:
+                validation_info.append(f"Safety Analysis: {structured_content.safetyAnalysis[:200]}...")
+            if structured_content.relevanceCheck:
+                validation_info.append(f"Relevance Check: {structured_content.relevanceCheck[:200]}...")
+            
+            error_details = "; ".join(validation_info) if validation_info else "Content validation failed - no educational content generated"
+            
+            return ProcessResponse(
+                success=False,
+                message="Content validation failed",
+                error=error_details,
+                metadata={
+                    "standard": standard,
+                    "subject": subject,
+                    "chapter": chapter,
+                    "content_type": content_type,
+                    "files_processed": len(files) if files else 0
+                }
+            )
         
         return ProcessResponse(
             success=True,
             message="Educational content processed successfully",
-            content=formatted_output,
+            content=structured_content,
             metadata={
                 "standard": standard,
                 "subject": subject,
@@ -218,7 +239,7 @@ async def process_educational_content(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Error processing content: {str(e)}")
+        logger.error(f"❌ Error processing content: {str(e)}")
         return ProcessResponse(
             success=False,
             message="Internal processing error",
@@ -231,91 +252,13 @@ async def process_educational_content(
             }
         )
 
-# Text-only processing endpoint (simplified)
-@app.post("/process-text", response_model=ProcessResponse)
-async def process_text_content(request: ProcessRequest, text_content: str = Form(...)):
-    """
-    Simplified endpoint for text-only processing
-    """
-    try:
-        result = process_educational_content_tool(
-            content_source=text_content,
-            standard=request.standard,
-            subject=request.subject,
-            chapter=request.chapter,
-            content_type="text"
-        )
-        
-        if result and result.get('error'):
-            return ProcessResponse(
-                success=False,
-                message="Processing failed",
-                error=result.get('error')
-            )
-        
-        formatted_output = format_educational_output_tool(result)
-        
-        return ProcessResponse(
-            success=True,
-            message="Text content processed successfully",
-            content=formatted_output
-        )
-        
-    except Exception as e:
-        return ProcessResponse(
-            success=False,
-            message="Processing error",
-            error=str(e)
-        )
-
-# Get supported file types
-@app.get("/supported-types")
-async def get_supported_types():
-    """Get supported content types and file formats"""
-    return {
-        "content_types": ["pdf", "images", "text"],
-        "supported_image_formats": [".png", ".jpg", ".jpeg", ".gif", ".bmp"],
-        "supported_document_formats": [".pdf"],
-        "max_file_size": "50MB",
-        "max_images": 10
-    }
-
-# Example usage endpoint
-@app.get("/examples")
-async def get_examples():
-    """Get example requests for testing"""
-    return {
-        "pdf_example": {
-            "standard": "Class 6",
-            "subject": "Science",
-            "chapter": "The Wonderful World of Science",
-            "content_type": "pdf",
-            "description": "Upload a PDF file with the above parameters"
-        },
-        "images_example": {
-            "standard": "Grade 8",
-            "subject": "Mathematics",
-            "chapter": "Algebra",
-            "content_type": "images",
-            "description": "Upload multiple image files with the above parameters"
-        },
-        "text_example": {
-            "standard": "Class 10",
-            "subject": "Biology",
-            "chapter": "Cell Structure",
-            "content_type": "text",
-            "text_content": "Cells are the basic unit of life...",
-            "description": "Send text content with the above parameters"
-        }
-    }
-
 if __name__ == "__main__":
     import uvicorn
     
-    print("🚀 Starting AI Textbook Processor API...")
-    print("📚 Educational Content Processing with Advanced AI")
-    print("🌐 API Documentation: http://localhost:8000/docs")
-    print("🔧 ReDoc Documentation: http://localhost:8000/redoc")
+    logger.info("🚀 Starting AI Textbook Processor API...")
+    logger.info("📚 Educational Content Processing with Structured JSON Output")
+    logger.info("🌐 API Documentation: http://localhost:8000/docs")
+    logger.info("🔧 ReDoc Documentation: http://localhost:8000/redoc")
     
     uvicorn.run(
         "main:app",

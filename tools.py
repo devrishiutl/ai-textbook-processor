@@ -1,9 +1,13 @@
 import base64
 import re
+import logging
 from PIL import Image
 from config import azure_client, AZURE_DEPLOYMENT_NAME
 from dataclasses import dataclass
 from typing import Dict, List, Tuple, Optional
+
+# Create logger for this module
+logger = logging.getLogger(__name__)
 
 @dataclass
 class GradeStandards:
@@ -239,6 +243,9 @@ class EducationalGradeValidator:
         
         target_grade = int(grade_match.group(1))
         
+        # Debug logging to track grade extraction
+        logger.info(f"🔍 Grade Extraction Debug: target_standard='{target_standard}' → extracted_grade={target_grade}")
+        
         if target_grade not in self.standards:
             return f"ERROR: Grade {target_grade} not supported (supported: 1-12)"
         
@@ -272,20 +279,44 @@ CONTENT TO VALIDATE:
 {content}
 
 ASSESSMENT PROTOCOL:
-1. Verify vocabulary appropriateness for age {standards.age_range}
-2. Check sentence complexity against {standards.sentence_length}
-3. Evaluate concept difficulty for {standards.cognitive_level}
-4. Consider subject-specific expectations for {subject}
+1. Evaluate OVERALL vocabulary level - is it mostly appropriate with some challenging terms?
+2. Check AVERAGE sentence complexity - occasional long sentences are acceptable
+3. Assess concept difficulty - can {standards.age_range} students understand with teacher guidance?
+4. Consider if this seems like legitimate {subject} content for {target_grade}
+5. Ask: "Would this appear in a real {target_grade} textbook?" (imperfections included)
 
 RESPONSE REQUIRED:
-[APPROPRIATE/TOO ADVANCED/TOO SIMPLE]: Grade [X] content
+You must start your response with EXACTLY ONE of these three options:
+• APPROPRIATE: Grade {target_grade} content
+• TOO ADVANCED: Grade {target_grade} content  
+• TOO SIMPLE: Grade {target_grade} content
+
+Then provide the following analysis:
 CONFIDENCE: [High/Medium/Low]
 VOCABULARY: [Assessment of word complexity]
 SENTENCES: [Assessment of sentence structure]
 CONCEPTS: [Assessment of idea complexity]
 RECOMMENDATION: [Specific action if content inappropriate]
 
-CRITICAL: Be strict about grade-level appropriateness. If automated analysis detected violations or content seems designed for higher grades, classify as TOO ADVANCED."""
+EXAMPLES:
+✓ Correct: "APPROPRIATE: Grade 6 content"
+✓ Correct: "TOO ADVANCED: Grade 6 content"
+✗ Wrong: "[APPROPRIATE/TOO ADVANCED/TOO SIMPLE]: Grade 6 content"
+
+VALIDATION GUIDELINES:
+• APPROPRIATE: Overall content suits {target_grade}, minor issues acceptable
+• TOO ADVANCED: Content clearly designed for higher grades (2+ grades above)
+• TOO SIMPLE: Content clearly designed for lower grades (2+ grades below)
+
+NUANCED ASSESSMENT RULES:
+1. Focus on OVERALL appropriateness, not individual worst sentences
+2. Consider that real textbooks may have some imperfect sentences
+3. If average sentence length is appropriate, don't reject for occasional long sentences
+4. If vocabulary is mostly grade-level with some challenging terms (explained), that's NORMAL
+5. Educational content can stretch students slightly - that's good pedagogy
+6. Only mark TOO ADVANCED if content is clearly meant for much higher grades
+
+CRITICAL: Be realistic about real-world educational content quality. Perfect textbooks don't exist."""
 
         # Get AI assessment with comprehensive context
         ai_result = call_gpt(assessment_prompt, "")
@@ -357,6 +388,7 @@ def vision_understand_tool(images, standard, subject, lesson, chat_history=[]):
         response = azure_client.chat.completions.create(
             model=AZURE_DEPLOYMENT_NAME,
             messages=messages,
+            temperature=0.1,  # Low temperature for consistent content extraction
             max_tokens=2000  # Increase for detailed analysis
         )
         return response.choices[0].message.content
@@ -370,7 +402,7 @@ def profanity_filter_tool(text, chat_history=[]):
 
 def child_filter_tool(text, chat_history=[]): 
     """Verify content is child-appropriate"""
-    return call_gpt("Evaluate if this content is appropriate for students. Consider age-appropriateness, safety, and educational value. Respond with 'APPROPRIATE' or 'INAPPROPRIATE' with reasoning.", text, chat_history)
+    return call_gpt("Evaluate if this content is safe and age-appropriate for students. Check ONLY for harmful content (violence, inappropriate themes, mature content). Do NOT consider subject relevance - focus only on safety and age-appropriateness. Respond with 'APPROPRIATE' or 'INAPPROPRIATE' with reasoning.", text, chat_history)
 
 def content_match_tool(text, subject, lesson, chat_history=[]): 
     """Verify content matches specified subject and lesson"""
@@ -586,7 +618,7 @@ def grade_level_check_tool(content, target_standard, subject, chapter):
 def extract_educational_content_with_docling(pdf_path, standard, subject, chapter):
     """Extract structured educational content using Docling's advanced AI"""
     
-    print(f"🔍 Processing PDF with Docling AI: {pdf_path}")
+    logger.info(f"🔍 Processing PDF with Docling AI: {pdf_path}")
     
     # Initialize Docling converter
     try:
@@ -596,12 +628,23 @@ def extract_educational_content_with_docling(pdf_path, standard, subject, chapte
         return f"ERROR: Docling not available - {str(e)}"
     
     try:
+        # Temporarily suppress logging during Docling processing
+        import logging
+        original_level = logging.getLogger().level
+        logging.getLogger().setLevel(logging.CRITICAL)
+        
         # Convert the PDF with advanced document understanding
         result = converter.convert(pdf_path)
-        print(f"✅ Successfully processed {len(result.document.texts)} text elements")
+        
+        # Restore logging
+        logging.getLogger().setLevel(original_level)
+        
+        logger.info(f"✅ Successfully processed {len(result.document.texts)} text elements")
         
     except Exception as e:
-        print(f"❌ Error processing PDF with Docling: {e}")
+        # Restore logging on error
+        logging.getLogger().setLevel(logging.INFO)
+        logger.error(f"❌ Error processing PDF with Docling: {e}")
         return None
     
     # Extract structured educational content
@@ -682,12 +725,12 @@ def extract_educational_content_with_docling(pdf_path, standard, subject, chapte
             }
             educational_content["extracted_images"].append(image_info)
     
-    print(f"📊 Extracted Content Summary:")
-    print(f"   • Main text: {len(educational_content['main_text'])} characters")
-    print(f"   • Figures: {len(educational_content['figures'])} items")
-    print(f"   • Tables: {len(educational_content['tables'])} items") 
-    print(f"   • Key concepts: {len(educational_content['key_concepts'])} items")
-    print(f"   • Images: {len(educational_content['extracted_images'])} items")
+    logger.info(f"📊 Extracted Content Summary:")
+    logger.info(f"   • Main text: {len(educational_content['main_text'])} characters")
+    logger.info(f"   • Figures: {len(educational_content['figures'])} items")
+    logger.info(f"   • Tables: {len(educational_content['tables'])} items") 
+    logger.info(f"   • Key concepts: {len(educational_content['key_concepts'])} items")
+    logger.info(f"   • Images: {len(educational_content['extracted_images'])} items")
     
     return educational_content
 
@@ -790,6 +833,7 @@ Provide comprehensive educational analysis suitable for {standard} level underst
         response = azure_client.chat.completions.create(
             model=AZURE_DEPLOYMENT_NAME,
             messages=messages,
+            temperature=0.1,  # Low temperature for consistent image analysis
             max_tokens=800
         )
         return response.choices[0].message.content
@@ -821,6 +865,80 @@ Generate comprehensive educational content that leverages both textual and visua
 
     return call_gpt(synthesis_prompt, "")
 
+def normalize_content_for_validation(content, standard):
+    """Normalize extracted content for consistent validation across extraction methods"""
+    
+    # Extract grade number for processing level
+    grade_match = re.search(r'(\d+)', standard)
+    target_grade = int(grade_match.group(1)) if grade_match else 6
+    
+    # Determine appropriate processing level based on grade
+    if target_grade <= 3:
+        max_sentence_length = 12
+        complexity_level = "very simple"
+    elif target_grade <= 6:
+        max_sentence_length = 18
+        complexity_level = "simple"
+    elif target_grade <= 9:
+        max_sentence_length = 25
+        complexity_level = "moderate"
+    else:
+        max_sentence_length = 35
+        complexity_level = "advanced"
+    
+    normalization_prompt = f"""BALANCED GRADE-LEVEL CONTENT OPTIMIZATION
+
+TARGET: {standard} students
+SENTENCE LENGTH RANGE: 12-{max_sentence_length} words per sentence
+COMPLEXITY LEVEL: {complexity_level}
+VOCABULARY LEVEL: Age-appropriate for {standard} (not too simple, not too complex)
+
+CRITICAL REQUIREMENTS:
+1. Every sentence must be between 12-{max_sentence_length} words (not shorter than 12, not longer than {max_sentence_length})
+2. Use {standard}-appropriate vocabulary (scientific terms with simple explanations)
+3. Maintain educational depth suitable for {standard} cognitive level
+4. Keep concepts challenging but understandable for {standard}
+
+BALANCING RULES:
+1. Break sentences longer than {max_sentence_length} words into 2-3 sentences of 12-{max_sentence_length} words each
+2. Combine very short sentences (under 12 words) to reach 12-{max_sentence_length} word range
+3. Use appropriate scientific vocabulary for {standard} with brief explanations when needed
+4. Maintain concept complexity suitable for {standard} students
+5. Use varied sentence structures (not just Subject + Verb + Object)
+6. Include connecting words appropriately (because, therefore, however - but keep sentences within limit)
+
+EXAMPLE FOR {standard}:
+Bad (too long): "Science is a systematic way of understanding the natural world through observation and experimentation which helps us learn about our environment and make predictions." (26 words)
+Bad (too simple): "Science helps us understand nature. We observe things. We do experiments." (12 words but too basic)
+Good ({standard} level): "Science is a systematic way of understanding the natural world around us. Scientists use observation and experimentation to learn about our environment. This scientific method helps us make accurate predictions about natural phenomena." (14, 15, 13 words - appropriate complexity)
+
+ORIGINAL CONTENT:
+{content}
+
+OPTIMIZED CONTENT (sentences 12-{max_sentence_length} words, {standard}-appropriate vocabulary and concepts):"""
+
+    # Use balanced approach for grade-appropriate content
+    messages = [
+        {"role": "system", "content": f"You are an expert educational content optimizer for {standard} students. You create content with sentences between 12-{max_sentence_length} words that maintains appropriate vocabulary and concept complexity for {standard} level."},
+        {"role": "user", "content": normalization_prompt}
+    ]
+    
+    try:
+        result = azure_client.chat.completions.create(
+            model=AZURE_DEPLOYMENT_NAME,
+            messages=messages,
+            temperature=0.05,  # Very low temperature for strict sentence control
+            max_tokens=2000
+        )
+        normalized_content = result.choices[0].message.content
+    except Exception as e:
+        logger.error(f"❌ Content normalization failed: {e}")
+        normalized_content = content  # Fallback to original content
+    
+    logger.info(f"📝 Content normalized for {standard} validation (max {max_sentence_length} words per sentence)")
+    
+    return normalized_content
+
 def enhanced_docling_extraction(pdf_path):
     """Enhanced Docling extraction that preserves image-text relationships"""
     
@@ -844,7 +962,7 @@ def process_educational_content_tool(content_source, standard, subject, chapter,
         final_context = comprehensive_context
         
     elif content_type == "images":
-        print(f"🖼️ Processing images with vision AI: {content_source}")
+        logger.info(f"🖼️ Processing images with vision AI: {content_source}")
         if isinstance(content_source, str):
             image_paths = [content_source]
         else:
@@ -873,7 +991,7 @@ Content: {content_source}
         {"role": "user", "content": "Formulate 3 subjective questions that encourage critical thinking and detailed explanations."}
     ]
     
-    print("🧠 Processing through AI educational pipeline...")
+    logger.info("🧠 Processing through AI educational pipeline...")
     
     # Import here to avoid circular imports
     from graph import build_graph
@@ -901,38 +1019,38 @@ def format_educational_output_tool(result):
     if not messages:
         return "No messages in the messages list."
     
-    print(f"🔍 Debug: Found {len(messages)} messages")
+    logger.debug(f"🔍 Debug: Found {len(messages)} messages")
     
     # Extract the assistant's response - handle both dict and BaseMessage formats
     assistant_response = None
     for i, message in enumerate(messages):
-        print(f"🔍 Debug: Message {i} type: {type(message)}")
+        logger.debug(f"🔍 Debug: Message {i} type: {type(message)}")
         
         # Handle dictionary format
         if isinstance(message, dict):
             role = message.get('role')
             content = message.get('content', '')
-            print(f"🔍 Debug: Dict message role: {role}")
+            logger.debug(f"🔍 Debug: Dict message role: {role}")
         else:
             # Handle LangChain BaseMessage format
             try:
                 role = getattr(message, 'type', None) or getattr(message, 'role', None)
                 content = getattr(message, 'content', '') or str(message)
-                print(f"🔍 Debug: BaseMessage role: {role}")
+                logger.debug(f"🔍 Debug: BaseMessage role: {role}")
                 
                 # For LangChain messages, check if it's an AIMessage (assistant)
                 if hasattr(message, '__class__'):
                     class_name = message.__class__.__name__
-                    print(f"🔍 Debug: Message class: {class_name}")
+                    logger.debug(f"🔍 Debug: Message class: {class_name}")
                     if 'AI' in class_name or 'Assistant' in class_name:
                         role = 'assistant'
             except Exception as e:
-                print(f"🔍 Debug: Error processing message {i}: {e}")
+                logger.debug(f"🔍 Debug: Error processing message {i}: {e}")
                 continue
         
         if role == 'assistant' and content:
             assistant_response = content
-            print(f"🔍 Debug: Found assistant response with {len(content)} characters")
+            logger.debug(f"🔍 Debug: Found assistant response with {len(content)} characters")
             break
     
     if not assistant_response:
@@ -945,7 +1063,7 @@ def format_educational_output_tool(result):
                 assistant_response = getattr(last_message, 'content', '') or str(last_message)
             
             if assistant_response:
-                print(f"🔍 Debug: Using last message as fallback with {len(assistant_response)} characters")
+                logger.debug(f"🔍 Debug: Using last message as fallback with {len(assistant_response)} characters")
             else:
                 return f"No educational content found in response. Last message: {str(last_message)[:200]}..."
         else:
