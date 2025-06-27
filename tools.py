@@ -3,6 +3,17 @@ import re
 import logging
 from config import azure_client, AZURE_DEPLOYMENT_NAME
 
+try:
+    from langsmith.run_helpers import traceable
+    LANGSMITH_AVAILABLE = True
+except ImportError:
+    # Create a dummy decorator if LangSmith is not available
+    def traceable(name=None):
+        def decorator(func):
+            return func
+        return decorator
+    LANGSMITH_AVAILABLE = False
+
 # Create logger for this module
 logger = logging.getLogger(__name__)
 
@@ -40,7 +51,7 @@ def encode_image_base64(img_path):
 # =============================================================================
 # 2. CONTENT EXTRACTION FUNCTIONS (Called first in processing)
 # =============================================================================
-
+@traceable(name="pdf_content_extraction")
 def extract_pdf_content(pdf_path):
     """Extract PDF text using Docling"""
     try:
@@ -57,6 +68,7 @@ def extract_pdf_content(pdf_path):
     except Exception as e:
         return f"ERROR: {str(e)}"
 
+@traceable(name="image_vision_processing")
 def vision_understand_tool(images, standard, subject, chapter):
     """Process images with vision AI"""
     try:
@@ -91,6 +103,7 @@ def vision_understand_tool(images, standard, subject, chapter):
 # 3. VALIDATION FUNCTIONS (Called by graph nodes)
 # =============================================================================
 
+@traceable(name="content_validation")
 def combined_validation_tool(content, target_standard, subject, chapter):
     """Simple combined validation using LLM intelligence"""
     
@@ -152,6 +165,7 @@ REASON: [Brief explanation if any check fails]"""
 # 4. CONTENT GENERATION FUNCTIONS (Called by graph nodes)
 # =============================================================================
 
+@traceable(name="educational_content_generation")
 def generate_all_content_tool(text, grade_level, subject, chapter):
     """Generate all educational content in one LLM call"""
     prompt = f"""Based on the following educational content, create comprehensive study materials for {grade_level} students.
@@ -210,6 +224,7 @@ CRITICAL: You must fill in ALL sections completely using ONLY the provided conte
 # 5. MAIN PROCESSING FUNCTION (Entry point from main.py)
 # =============================================================================
 
+@traceable(name="full_processing_pipeline")
 def process_educational_content_tool(content_source, standard, subject, chapter, content_type="pdf"):
     """Main processing function"""
     if content_type == "pdf":
