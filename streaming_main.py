@@ -9,6 +9,7 @@ import os
 import logging
 import json
 import asyncio
+import threading
 from typing import AsyncGenerator
 
 # Suppress warnings and configure minimal logging
@@ -47,7 +48,7 @@ async def stream_progress_updates(
         await asyncio.sleep(0.5)
         
         # Step 2: Content extraction
-        yield f"data: {json.dumps({'step': 2, 'status': 'extracting', 'message': f'Extracting content from {content_type}...', 'progress': 15})}\n\n"
+        yield f"data: {json.dumps({'step': 2, 'status': 'extracting', 'message': f'Extracting content using Docling (cost-optimized)...', 'progress': 15})}\n\n"
         await asyncio.sleep(1)
         
         # Step 3: Validation starting
@@ -69,29 +70,197 @@ async def stream_progress_updates(
         # Step 7: Processing (this is where the actual work happens)
         yield f"data: {json.dumps({'step': 7, 'status': 'processing', 'message': 'Processing with LangGraph workflow...', 'progress': 65})}\n\n"
         
-        # Run the actual processing
-        result = process_educational_content_tool(content_path, standard, subject, chapter, content_type)
-        
-        # Check for validation failures
-        if result and (result.get('error') or result.get('processing_status') == 'FAILED'):
-            validation_results = result.get('validation_results', {})
-            error_message = f"Validation failed: {validation_results.get('reason', 'Unknown error')}"
-            yield f"data: {json.dumps({'step': 8, 'status': 'failed', 'message': error_message, 'progress': 100, 'error': True})}\n\n"
+        # Custom streaming content generation instead of LangGraph
+        try:
+            # First, extract and validate content using unified Docling approach
+            if content_type == "pdf":
+                from tools import extract_content_with_docling
+                content = extract_content_with_docling(content_path, "pdf")
+            elif content_type == "images":
+                # 💰 UNIFIED COST OPTIMIZATION: Use free Docling for all image processing
+                from tools import extract_content_with_docling
+                content = extract_content_with_docling(content_path, "images")
+            else:
+                content = content_path
+            
+            if content.startswith("ERROR"):
+                yield f"data: {json.dumps({'step': 8, 'status': 'failed', 'message': f'Content extraction failed: {content}', 'progress': 100, 'error': True})}\n\n"
+                return
+            
+            # Validate content
+            yield f"data: {json.dumps({'step': 7, 'status': 'processing', 'message': 'Running comprehensive validation...', 'progress': 66})}\n\n"
+            
+            from tools import combined_validation_tool
+            validation_results = combined_validation_tool(content, standard, subject, chapter)
+            
+            if validation_results.get('overall_status') != 'PASSED':
+                error_message = f"Validation failed: {validation_results.get('reason', 'Unknown error')}"
+                yield f"data: {json.dumps({'step': 8, 'status': 'failed', 'message': error_message, 'progress': 100, 'error': True})}\n\n"
+                return
+            
+            # Stream content generation with real-time updates
+            yield f"data: {json.dumps({'step': 7, 'status': 'processing', 'message': 'Starting content generation...', 'progress': 67})}\n\n"
+            
+            # Define progress callback for streaming updates
+            async def progress_callback(message, progress):
+                yield f"data: {json.dumps({'step': 7, 'status': 'processing', 'message': message, 'progress': progress})}\n\n"
+            
+            # Import streaming function
+            from tools import generate_content_streaming
+            
+            # Generate study notes with threading
+            yield f"data: {json.dumps({'step': 7, 'status': 'processing', 'message': 'Generating important notes...', 'progress': 68})}\n\n"
+            
+            # Use threading for notes generation
+            notes_complete = threading.Event()
+            notes_result = [None]
+            
+            def generate_notes():
+                try:
+                    from tools import generate_study_notes_tool
+                    notes_result[0] = generate_study_notes_tool(content, standard, subject, chapter)
+                finally:
+                    notes_complete.set()
+            
+            notes_thread = threading.Thread(target=generate_notes)
+            notes_thread.start()
+            
+            # Show progress while waiting
+            while not notes_complete.is_set():
+                if notes_complete.wait(timeout=2):
+                    break
+                yield f"data: {json.dumps({'step': 7, 'status': 'processing', 'message': 'Still generating notes...', 'progress': 69})}\n\n"
+            
+            notes_thread.join()
+            notes = notes_result[0]
+            
+            yield f"data: {json.dumps({'step': 7, 'status': 'processing', 'message': 'Study notes completed!', 'progress': 70})}\n\n"
+            await asyncio.sleep(0.5)
+            
+            # Generate fill-in-the-blanks with threading
+            yield f"data: {json.dumps({'step': 7, 'status': 'processing', 'message': 'Creating fill-in-the-blank questions...', 'progress': 71})}\n\n"
+            
+            # Use threading for blanks generation
+            blanks_complete = threading.Event()
+            blanks_result = [None]
+            
+            def generate_blanks():
+                try:
+                    from tools import generate_fill_blanks_tool
+                    blanks_result[0] = generate_fill_blanks_tool(content, standard, subject, chapter)
+                finally:
+                    blanks_complete.set()
+            
+            blanks_thread = threading.Thread(target=generate_blanks)
+            blanks_thread.start()
+            
+            # Show progress while waiting
+            while not blanks_complete.is_set():
+                if blanks_complete.wait(timeout=2):
+                    break
+                yield f"data: {json.dumps({'step': 7, 'status': 'processing', 'message': 'Still creating blanks...', 'progress': 71})}\n\n"
+            
+            blanks_thread.join()
+            blanks = blanks_result[0]
+            
+            yield f"data: {json.dumps({'step': 7, 'status': 'processing', 'message': 'Fill-in-blanks created!', 'progress': 72})}\n\n"
+            await asyncio.sleep(0.5)
+            
+            # Generate matching exercises with threading
+            yield f"data: {json.dumps({'step': 7, 'status': 'processing', 'message': 'Preparing matching exercises...', 'progress': 73})}\n\n"
+            
+            # Use threading for matching generation
+            matching_complete = threading.Event()
+            matching_result = [None]
+            
+            def generate_matching():
+                try:
+                    from tools import generate_matching_tool
+                    matching_result[0] = generate_matching_tool(content, standard, subject, chapter)
+                finally:
+                    matching_complete.set()
+            
+            matching_thread = threading.Thread(target=generate_matching)
+            matching_thread.start()
+            
+            # Show progress while waiting
+            while not matching_complete.is_set():
+                if matching_complete.wait(timeout=2):
+                    break
+                yield f"data: {json.dumps({'step': 7, 'status': 'processing', 'message': 'Still preparing matching...', 'progress': 73})}\n\n"
+            
+            matching_thread.join()
+            matching = matching_result[0]
+            
+            yield f"data: {json.dumps({'step': 7, 'status': 'processing', 'message': 'Matching exercises ready!', 'progress': 74})}\n\n"
+            await asyncio.sleep(0.5)
+            
+            # Generate Q&A section with threading
+            yield f"data: {json.dumps({'step': 7, 'status': 'processing', 'message': 'Formulating Q&A section...', 'progress': 75})}\n\n"
+            
+            # Use threading for Q&A generation
+            qna_complete = threading.Event()
+            qna_result = [None]
+            
+            def generate_qna():
+                try:
+                    from tools import generate_qna_tool
+                    qna_result[0] = generate_qna_tool(content, standard, subject, chapter)
+                finally:
+                    qna_complete.set()
+            
+            qna_thread = threading.Thread(target=generate_qna)
+            qna_thread.start()
+            
+            # Show progress while waiting
+            while not qna_complete.is_set():
+                if qna_complete.wait(timeout=2):
+                    break
+                yield f"data: {json.dumps({'step': 7, 'status': 'processing', 'message': 'Still formulating Q&A...', 'progress': 75})}\n\n"
+            
+            qna_thread.join()
+            qna = qna_result[0]
+            
+            yield f"data: {json.dumps({'step': 7, 'status': 'processing', 'message': 'Q&A section completed!', 'progress': 76})}\n\n"
+            await asyncio.sleep(0.5)
+            
+            # Combine all generated content
+            combined_content = f"""
+COMPREHENSIVE VALIDATION RESULTS:
+Grade Check: {validation_results.get('grade_check', 'PASS')}
+Safety Check: {validation_results.get('safety_check', 'PASS')}
+Relevance Check: {validation_results.get('relevance_check', 'PASS')}
+Overall Status: {validation_results.get('overall_status', 'PASSED')}
+
+{notes}
+
+{blanks}
+
+{matching}
+
+{qna}
+            """
+            
+            # Create result object
+            result = {
+                'messages': [{'role': 'assistant', 'content': combined_content}],
+                'validation_results': validation_results
+            }
+            
+        except Exception as e:
+            logger.error(f"Custom streaming processing error: {str(e)}")
+            yield f"data: {json.dumps({'step': 8, 'status': 'failed', 'message': f'Processing error: {str(e)}', 'progress': 100, 'error': True})}\n\n"
             return
         
-        # Step 8: Content generation
-        yield f"data: {json.dumps({'step': 8, 'status': 'generating', 'message': 'Generating educational content...', 'progress': 75})}\n\n"
-        await asyncio.sleep(1)
-        
-        # Step 9: Formatting
-        yield f"data: {json.dumps({'step': 9, 'status': 'formatting', 'message': 'Formatting output...', 'progress': 85})}\n\n"
+        # Step 8: Formatting output
+        yield f"data: {json.dumps({'step': 8, 'status': 'formatting', 'message': 'Formatting educational content...', 'progress': 85})}\n\n"
         
         # Format the output
         raw_output = format_educational_output_tool(result)
         structured_content = parse_educational_content(raw_output)
         
-        # Step 10: Finalizing
-        yield f"data: {json.dumps({'step': 10, 'status': 'finalizing', 'message': 'Finalizing results...', 'progress': 95})}\n\n"
+        # Step 9: Finalizing
+        yield f"data: {json.dumps({'step': 9, 'status': 'finalizing', 'message': 'Finalizing results...', 'progress': 95})}\n\n"
         await asyncio.sleep(0.5)
         
         # Check if content is empty
@@ -101,13 +270,13 @@ async def stream_progress_updates(
             structured_content.matchTheFollowing.column_a,
             structured_content.questionAnswer.questions
         ]):
-            yield f"data: {json.dumps({'step': 11, 'status': 'failed', 'message': 'No educational content generated', 'progress': 100, 'error': True})}\n\n"
+            yield f"data: {json.dumps({'step': 10, 'status': 'failed', 'message': 'No educational content generated', 'progress': 100, 'error': True})}\n\n"
             return
         
         # Success!
         validation_results = result.get('validation_results', {})
         success_response = {
-            'step': 11,
+            'step': 10,
             'status': 'completed',
             'message': 'Educational content processed successfully!',
             'progress': 100,
@@ -229,7 +398,7 @@ async def process_educational_content(
         if content_type == "text" and not text_content:
             raise HTTPException(400, "Text content required")
         
-        # Process content
+        # Process content using unified Docling approach
         if content_type == "text":
             result = process_educational_content_tool(text_content, standard, subject, chapter, "text")
         elif content_type == "pdf":
@@ -259,6 +428,7 @@ async def process_educational_content(
                         shutil.copyfileobj(file.file, temp_file)
                         temp_paths.append(temp_file.name)
                 
+                # Use unified Docling approach - no more expensive Azure Vision AI fallback
                 result = process_educational_content_tool(temp_paths, standard, subject, chapter, "images")
             finally:
                 for path in temp_paths:

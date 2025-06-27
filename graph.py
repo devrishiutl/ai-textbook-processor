@@ -7,6 +7,9 @@ import logging
 
 # Create logger for this module
 logger = logging.getLogger(__name__)
+
+# Import tools that now use unified Docling approach for both PDFs and images
+# This provides major cost optimization by eliminating expensive Azure Vision AI calls
 from tools import (
     combined_validation_tool,
     generate_all_content_tool
@@ -130,7 +133,7 @@ def content_normalization_node(state):
     return {**state, "original_content": state["content"]}
 
 def generate_all_content_node(state):
-    """Generate all educational content in one LLM call"""
+    """Generate all educational content in one LLM call and format output"""
     try:
         # Generate all content at once
         all_content = generate_all_content_tool(
@@ -148,27 +151,8 @@ def generate_all_content_node(state):
             "qna": all_content  # Store raw content
         }
         
-        return {
-            **state, 
-            "generated_content": generated_content,
-            "processing_status": "CONTINUE"
-        }
-        
-    except Exception as e:
-        return {
-            **state,
-            "processing_status": "FAILED",
-            "error_details": f"Content generation error: {str(e)}"
-        }
-
-def output_formatter_node(state):
-    """Format final output"""
-    try:
+        # Format the output immediately (merged from format_output_node)
         validation_results = state.get("validation_results", {})
-        generated_content = state.get("generated_content", {})
-        
-        # Use the raw generated content directly
-        raw_content = generated_content.get('notes', 'Not generated')
         
         comprehensive_response = f"""
 COMPREHENSIVE VALIDATION RESULTS:
@@ -177,18 +161,22 @@ Safety Check: {validation_results.get('safety_check', 'Not performed')}
 Relevance Check: {validation_results.get('relevance_check', 'Not performed')}
 Overall Status: {validation_results.get('status', 'Unknown')}
 
-{raw_content}
+{all_content}
         """
         
         return {
-            **state,
+            **state, 
+            "generated_content": generated_content,
+            "processing_status": "CONTINUE",
             "messages": state["messages"] + [{"role": "assistant", "content": comprehensive_response}]
         }
         
     except Exception as e:
-        error_response = f"Output formatting failed: {str(e)}"
+        error_response = f"Content generation failed: {str(e)}"
         return {
             **state,
+            "processing_status": "FAILED",
+            "error_details": f"Content generation error: {str(e)}",
             "messages": state["messages"] + [{"role": "assistant", "content": error_response}]
         }
 
@@ -197,10 +185,10 @@ def build_graph():
     graph = StateGraph(AgentState)
     
     # Add nodes - removed content_extraction_node as it's unnecessary
+    # Removed output_formatter_node as it's merged into generate_all_content_node
     graph.add_node("comprehensive_validation", comprehensive_validation_node)
     graph.add_node("normalize_content", content_normalization_node)
     graph.add_node("generate_all_content", generate_all_content_node)
-    graph.add_node("format_output", output_formatter_node)
     
     # Define flow - start directly with validation
     graph.set_entry_point("comprehensive_validation")
@@ -215,7 +203,6 @@ def build_graph():
     )
     
     graph.add_edge("normalize_content", "generate_all_content")
-    graph.add_edge("generate_all_content", "format_output")
-    graph.add_edge("format_output", END)
+    graph.add_edge("generate_all_content", END)  # Direct to END since formatting is now included
     
     return graph.compile()

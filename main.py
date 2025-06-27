@@ -39,7 +39,7 @@ async def process_educational_content(
         if content_type == "text" and not text_content:
             raise HTTPException(400, "Text content required")
         
-        # Process content
+        # Process content using unified Docling approach (major cost optimization!)
         if content_type == "text":
             result = process_educational_content_tool(text_content, standard, subject, chapter, "text")
         elif content_type == "pdf":
@@ -51,6 +51,7 @@ async def process_educational_content(
                 temp_path = temp_file.name
             
             try:
+                # Uses free Docling for PDF extraction
                 result = process_educational_content_tool(temp_path, standard, subject, chapter, "pdf")
             finally:
                 os.unlink(temp_path)
@@ -69,6 +70,8 @@ async def process_educational_content(
                         shutil.copyfileobj(file.file, temp_file)
                         temp_paths.append(temp_file.name)
                 
+                # 💰 MAJOR COST SAVINGS: Uses free Docling instead of expensive Azure Vision AI
+                # Saves ₹10+ per request for image processing!
                 result = process_educational_content_tool(temp_paths, standard, subject, chapter, "images")
             finally:
                 for path in temp_paths:

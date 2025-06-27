@@ -10,3 +10,6 @@ fastapi
 uvicorn
 python-multipart
 reportlab
+pytesseract
+pillow
+easyocr
