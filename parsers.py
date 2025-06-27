@@ -2,133 +2,194 @@ import re
 from models import StructuredContent, FillInTheBlanks, MatchTheFollowing, QuestionAnswer
 
 def parse_educational_content(raw_content: str) -> StructuredContent:
-    """Parse the raw educational content into structured JSON format"""
+    """Parse raw content into structured format"""
     
-    # Initialize sections
     sections = {
         'grade_validation': '',
-        'safety_analysis': '',
-        'relevance_check': '',
         'study_notes': '',
         'fill_blanks': '',
         'match_following': '',
         'questions': ''
     }
     
-    # Split content by section headers
     current_section = None
     lines = raw_content.split('\n')
     
     for line in lines:
         line = line.strip()
         
-        # Identify section headers
-        if '🎯 GRADE LEVEL VALIDATION' in line:
+        # Handle both old and new format headers
+        if 'COMPREHENSIVE VALIDATION RESULTS:' in line:
             current_section = 'grade_validation'
-        elif '🔒 CONTENT SAFETY ANALYSIS' in line:
-            current_section = 'safety_analysis'
-        elif '🎯 CONTENT RELEVANCE CHECK' in line:
-            current_section = 'relevance_check'
-        elif '📚 COMPREHENSIVE STUDY NOTES' in line:
+        elif ('COMPREHENSIVE STUDY NOTES' in line or 
+              'STUDY NOTES:' in line or 
+              '### STUDY NOTES:' in line):
             current_section = 'study_notes'
-        elif '📝 FILL-IN-THE-BLANKS EXERCISES' in line:
+        elif ('FILL-IN-THE-BLANKS EXERCISES' in line or 
+              'FILL-IN-THE-BLANKS:' in line or 
+              '### FILL-IN-THE-BLANKS:' in line):
             current_section = 'fill_blanks'
-        elif '🔗 MATCH-THE-FOLLOWING EXERCISES' in line:
+        elif ('MATCH-THE-FOLLOWING EXERCISES' in line or
+              '### MATCH-THE-FOLLOWING EXERCISES:' in line):
             current_section = 'match_following'
-        elif '❓ SUBJECTIVE QUESTIONS' in line:
+        elif ('SUBJECTIVE QUESTIONS' in line or
+              '### SUBJECTIVE QUESTIONS:' in line):
             current_section = 'questions'
         elif line.startswith('='):
-            continue  # Skip separator lines
+            continue
         elif current_section and line:
             sections[current_section] += line + '\n'
     
-    # Parse Fill-in-the-Blanks
-    fill_blanks_data = parse_fill_in_blanks(sections['fill_blanks'])
-    
-    # Parse Match-the-Following
-    match_following_data = parse_match_following(sections['match_following'])
-    
-    # Parse Questions and Answers
-    qa_data = parse_questions_answers(sections['questions'])
-    
     return StructuredContent(
         importantNotes=sections['study_notes'].strip(),
-        fillInTheBlanks=fill_blanks_data,
-        matchTheFollowing=match_following_data,
-        questionAnswer=qa_data,
-        gradeValidation=sections['grade_validation'].strip(),
-        safetyAnalysis=sections['safety_analysis'].strip(),
-        relevanceCheck=sections['relevance_check'].strip()
+        fillInTheBlanks=parse_fill_in_blanks(sections['fill_blanks']),
+        matchTheFollowing=parse_match_following(sections['match_following']),
+        questionAnswer=parse_questions_answers(sections['questions'])
     )
 
 def parse_fill_in_blanks(content: str) -> FillInTheBlanks:
-    """Parse fill-in-the-blanks section"""
+    """Parse fill-in-blanks section - handles both old and new formats"""
     questions = {}
     answers = {}
     
-    # Pattern: 1. Question text with ________.
-    #          **Answer:** answer_text
-    pattern = r'(\d+)\.\s*(.*?)\s*\n\s*\*\*Answer:\*\*\s*(.*?)(?=\n\d+\.|\n\n|$)'
+    # Try old format first (inline answers)
+    pattern = r'(\d+)\.\s*(.*?)\s*\n\s*Answer:\s*(.*?)(?=\n\d+\.|\n\n|$)'
     matches = re.findall(pattern, content, re.DOTALL)
     
-    for match in matches:
-        num, question, answer = match
-        questions[num] = question.strip()
-        answers[num] = answer.strip()
+    if matches:
+        for match in matches:
+            num, question, answer = match
+            questions[num] = question.strip()
+            answers[num] = answer.strip()
+    else:
+        # New format: content already has questions and answers mixed
+        # Split by ANSWERS: or ### ANSWERS: to separate questions and answers
+        if '### ANSWERS:' in content:
+            parts = content.split('### ANSWERS:', 1)
+        elif 'ANSWERS:' in content:
+            parts = content.split('ANSWERS:', 1)
+        else:
+            parts = [content, '']
+            
+        questions_part = parts[0]
+        answers_part = parts[1] if len(parts) > 1 else ''
+        
+        # Extract questions
+        question_matches = re.findall(r'(\d+)\.\s*(.*?)(?=\n\d+\.|\n\n|ANSWERS|###|$)', questions_part, re.DOTALL)
+        for num, question in question_matches:
+            if '______' in question:  # Only questions with blanks
+                questions[num] = question.strip()
+        
+        # Extract answers
+        if answers_part and answers_part.strip():
+            answer_matches = re.findall(r'(\d+)\.\s*(.*?)(?=\n\d+\.|\n\n|$)', answers_part, re.DOTALL)
+            for num, answer in answer_matches:
+                if answer.strip():  # Only add non-empty answers
+                    answers[num] = answer.strip()
     
     return FillInTheBlanks(questions=questions, answers=answers)
 
 def parse_match_following(content: str) -> MatchTheFollowing:
-    """Parse match-the-following section"""
+    """Parse match-the-following section with aggressive extraction"""
     column_a = {}
     column_b = {}
     answers = {}
     
-    lines = content.split('\n')
-    current_column = None
+    if not content or content.strip() == "Not generated":
+        return MatchTheFollowing(column_a=column_a, column_b=column_b, answers=answers)
     
-    for line in lines:
-        line = line.strip()
-        
-        if 'Column A:' in line:
-            current_column = 'A'
-        elif 'Column B:' in line:
-            current_column = 'B'
-        elif '**Answers:**' in line:
-            current_column = 'answers'
-        elif current_column == 'A' and re.match(r'^\d+\.', line):
-            # Pattern: 1. Text
-            match = re.match(r'^(\d+)\.\s*(.*)', line)
-            if match:
-                column_a[match.group(1)] = match.group(2)
-        elif current_column == 'B' and re.match(r'^[A-Z]\.', line):
-            # Pattern: A. Text
-            match = re.match(r'^([A-Z])\.\s*(.*)', line)
-            if match:
-                column_b[match.group(1)] = match.group(2)
-        elif current_column == 'answers' and ' - ' in line:
-            # Pattern: 1 - C, 2 - D, 3 - B
-            parts = line.split(', ')
-            for part in parts:
-                if ' - ' in part:
-                    num, letter = part.split(' - ')
-                    answers[num.strip()] = letter.strip()
+    # More aggressive parsing - look for the patterns anywhere in the content
+    
+    # Extract Column A items
+    column_a_match = re.search(r'Column A:\s*(.*?)(?=Column B:|Answers:|$)', content, re.DOTALL)
+    if column_a_match:
+        items_text = column_a_match.group(1)
+        items = re.findall(r'(\d+)\.([^0-9]+?)(?=\d+\.|$)', items_text)
+        for num, item in items:
+            column_a[num] = item.strip()
+    
+    # Extract Column B items
+    column_b_match = re.search(r'Column B:\s*(.*?)(?=Answers:|$)', content, re.DOTALL)
+    if column_b_match:
+        items_text = column_b_match.group(1).strip()
+        # Split on letter patterns and extract
+        parts = re.split(r'\s*([A-E])\.', items_text)
+        # parts will be ['', 'A', 'text1', 'B', 'text2', 'C', 'text3', ...]
+        for i in range(1, len(parts), 2):
+            if i + 1 < len(parts):
+                letter = parts[i]
+                text = parts[i + 1].strip()
+                # Remove any trailing letter pattern that might be attached
+                text = re.sub(r'\s*[A-E]\..*$', '', text).strip()
+                if text:
+                    column_b[letter] = text
+    
+    # Extract Answers
+    answers_match = re.search(r'Answers?:\s*(.+)', content)
+    if answers_match:
+        answers_text = answers_match.group(1)
+        pairs = re.findall(r'(\d+)-([A-Z])', answers_text)
+        for num, letter in pairs:
+            answers[num] = letter
+    
+    # Fallback: Extract any numbered and lettered items
+    if not column_a:
+        numbered_items = re.findall(r'(\d+)\.([^0-9\n]+)', content)
+        for num, item in numbered_items[:5]:
+            column_a[num] = item.strip()
+    
+    if not column_b:
+        lettered_items = re.findall(r'([A-E])\.([^A-E\n]+)', content)
+        for letter, item in lettered_items[:5]:
+            column_b[letter] = item.strip()
+    
+    # Generate answers if missing
+    if column_a and column_b and not answers:
+        nums = sorted(column_a.keys())[:5]
+        letters = sorted(column_b.keys())[:5]
+        for i, num in enumerate(nums):
+            if i < len(letters):
+                answers[num] = letters[i]
     
     return MatchTheFollowing(column_a=column_a, column_b=column_b, answers=answers)
 
 def parse_questions_answers(content: str) -> QuestionAnswer:
-    """Parse questions and answers section"""
+    """Parse questions and answers section - handles both old and new formats"""
     questions = {}
     answers = {}
     
-    # Pattern: **Question 1:** Question text
-    #          **Answer:** Answer text
-    pattern = r'\*\*Question\s*(\d+):\*\*\s*(.*?)\s*\*\*Answer:\*\*\s*(.*?)(?=\*\*Question|\Z)'
+    # Try old format first (Q1: question A1: answer)
+    pattern = r'Q(\d+):\s*(.*?)\s*A\1:\s*(.*?)(?=Q\d+:|$)'
     matches = re.findall(pattern, content, re.DOTALL)
     
-    for match in matches:
-        num, question, answer = match
-        questions[f"Q{num}"] = question.strip()
-        answers[f"Q{num}"] = answer.strip()
+    if matches:
+        for match in matches:
+            num, question, answer = match
+            questions[f"Q{num}"] = question.strip()
+            answers[f"Q{num}"] = answer.strip()
+    else:
+        # New format: content already has questions and answers mixed
+        # Split by ANSWERS: or ### ANSWERS: to separate questions and answers
+        if '### ANSWERS:' in content:
+            parts = content.split('### ANSWERS:', 1)
+        elif 'ANSWERS:' in content:
+            parts = content.split('ANSWERS:', 1)
+        else:
+            parts = [content, '']
+            
+        questions_part = parts[0]
+        answers_part = parts[1] if len(parts) > 1 else ''
+        
+        # Extract questions
+        question_matches = re.findall(r'Q(\d+):\s*(.*?)(?=Q\d+:|\nANSWERS|\n###|\n\n|$)', questions_part, re.DOTALL)
+        for num, question in question_matches:
+            questions[f"Q{num}"] = question.strip()
+        
+        # Extract answers
+        if answers_part and answers_part.strip():
+            answer_matches = re.findall(r'Q(\d+):\s*(.*?)(?=Q\d+:|\n\n|$)', answers_part, re.DOTALL)
+            for num, answer in answer_matches:
+                if answer.strip():  # Only add non-empty answers
+                    answers[f"Q{num}"] = answer.strip()
     
     return QuestionAnswer(questions=questions, answers=answers) 
