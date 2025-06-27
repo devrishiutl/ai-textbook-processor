@@ -1,14 +1,2 @@
-python main.py --content [INPUT] --standard [GRADE] --subject [SUBJECT] --chapter [CHAPTER]
-
-python main.py \
-  --content "/Users/devrishibhardwaj/Downloads/6th_science_ch1.pdf" \
-  --standard "Class 6" \
-  --subject "Science" \
-  --chapter "The Wonderful World of Science"
-
-python main.py \
-  --content "/Users/devrishibhardwaj/Downloads/images/1.png,/Users/devrishibhardwaj/Downloads/images/2.png,/Users/devrishibhardwaj/Downloads/images/3.png,/Users/devrishibhardwaj/Downloads/images/4.png,/Users/devrishibhardwaj/Downloads/images/5.png"
-  --standard "Class 6" \
-  --subject "Science" \
-  --chapter "The Wonderful World of Science"
-  --type images
+python main.py
+python visualize_langgraph.py

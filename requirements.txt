@@ -2,6 +2,7 @@ openai
 langchain
 langchain-core
 langgraph
+langsmith
 python-dotenv
 pillow
 docling
