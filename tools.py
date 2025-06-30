@@ -2,6 +2,10 @@ import base64
 import re
 import logging
 from config import azure_client, AZURE_DEPLOYMENT_NAME
+import cv2
+import numpy as np
+from PIL import Image
+import io
 
 try:
     from langsmith.run_helpers import traceable
@@ -68,6 +72,56 @@ def extract_pdf_content(pdf_path):
     except Exception as e:
         return f"ERROR: {str(e)}"
 
+def preprocess_image(image_path: str, target_size=(800, 800), quality=85) -> str:
+    """
+    Preprocess image before sending to LLM:
+    1. Resize while maintaining aspect ratio
+    2. Optimize quality
+    3. Convert to base64
+    
+    Args:
+        image_path: Path to image file
+        target_size: Maximum dimensions (width, height)
+        quality: JPEG quality (0-100)
+    
+    Returns:
+        Base64 encoded optimized image or error message
+    """
+    try:
+        # Open image with PIL
+        img = Image.open(image_path)
+        
+        # Calculate aspect ratio preserving resize dimensions
+        aspect_ratio = img.width / img.height
+        if aspect_ratio > 1:
+            # Width is larger
+            new_width = min(img.width, target_size[0])
+            new_height = int(new_width / aspect_ratio)
+        else:
+            # Height is larger
+            new_height = min(img.height, target_size[1])
+            new_width = int(new_height * aspect_ratio)
+            
+        # Resize image
+        img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        
+        # Convert to RGB if necessary
+        if img.mode in ('RGBA', 'LA'):
+            background = Image.new('RGB', img.size, (255, 255, 255))
+            background.paste(img, mask=img.split()[-1])
+            img = background
+        elif img.mode != 'RGB':
+            img = img.convert('RGB')
+            
+        # Save to bytes with quality optimization
+        buffer = io.BytesIO()
+        img.save(buffer, format='JPEG', quality=quality, optimize=True)
+        encoded = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        
+        return encoded
+    except Exception as e:
+        return f"ERROR: Image preprocessing failed - {str(e)}"
+
 @traceable(name="image_vision_processing")
 def vision_understand_tool(images, standard, subject, chapter):
     """Process images with vision AI"""
@@ -76,7 +130,13 @@ def vision_understand_tool(images, standard, subject, chapter):
         user_content = [{"type": "text", "text": "Extract all educational content from these images. Describe exactly what you see - text, diagrams, concepts, topics, etc. Do not generate new content, only describe what is actually present in the images."}]
         
         for img_path in images:
-            encoded = encode_image_base64(img_path)
+            # Preprocess image before encoding
+            encoded = preprocess_image(
+                img_path,
+                target_size=(800, 800),  # Max dimensions while maintaining aspect ratio
+                quality=85  # Good balance between quality and size
+            )
+            
             if encoded.startswith("ERROR"):
                 return encoded
             
@@ -92,7 +152,7 @@ def vision_understand_tool(images, standard, subject, chapter):
                 {"role": "user", "content": user_content}
             ],
             temperature=0.1,
-            max_tokens=3000  # Increased for comprehensive content extraction from multiple images
+            max_tokens=3000
         )
         
         return response.choices[0].message.content
