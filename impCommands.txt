@@ -1,2 +1,77 @@
 python main.py
 python visualize_langgraph.py
+
+
+
+
+curl -X POST http://localhost:8001/process-json 
+-H "accept: application/json" 
+-F "standard=Class 12" 
+-F "subject=physics" 
+-F "chapter=semiconductor" 
+-F "content_type=pdf" 
+-F "files=@/Users/devrishibhardwaj/Downloads/images/class12/Physics_12th_ch6.pdf" 
+-F "text_content="
+
+
+curl --location 'http://localhost:8001/process-stream' \
+--header 'accept: application/json' \
+--form 'standard="Class 12"' \
+--form 'subject="physics"' \
+--form 'chapter="semiconductor"' \
+--form 'content_type="pdf"' \
+--form 'files=@"/Users/devrishibhardwaj/Downloads/images/class12/Physics_12th_ch6.pdf"' \
+--form 'text_content=""'
+
+
+
+curl --location 'http://localhost:8001/process-stream' \
+--header 'accept: application/json' \
+--form 'standard="Class 12"' \
+--form 'subject="physics"' \
+--form 'chapter="semiconductor"' \
+--form 'content_type="images"' \
+--form 'files=@"/Users/devrishibhardwaj/Downloads/images/class12/Screenshot 2025-06-27 at 3.51.27 PM.png"' \
+--form 'files=@"/Users/devrishibhardwaj/Downloads/images/class12/Screenshot 2025-06-27 at 3.51.33 PM.png"' \
+--form 'files=@"/Users/devrishibhardwaj/Downloads/images/class12/Screenshot 2025-06-27 at 3.51.37 PM.png"' \
+--form 'files=@"/Users/devrishibhardwaj/Downloads/images/class12/Screenshot 2025-06-27 at 3.51.45 PM.png"' \
+--form 'files=@"/Users/devrishibhardwaj/Downloads/images/class12/Screenshot 2025-06-27 at 3.51.53 PM.png"' \
+--form 'files=@"/Users/devrishibhardwaj/Downloads/images/class12/Screenshot 2025-06-27 at 3.52.00 PM.png"' \
+--form 'files=@"/Users/devrishibhardwaj/Downloads/images/class12/Screenshot 2025-06-27 at 3.52.09 PM.png"' \
+--form 'files=@"/Users/devrishibhardwaj/Downloads/images/class12/Screenshot 2025-06-27 at 3.52.17 PM.png"' \
+--form 'files=@"/Users/devrishibhardwaj/Downloads/images/class12/Screenshot 2025-06-27 at 3.52.25 PM.png"' \
+--form 'files=@"/Users/devrishibhardwaj/Downloads/images/class12/Screenshot 2025-06-27 at 3.52.34 PM.png"' \
+--form 'files=@"/Users/devrishibhardwaj/Downloads/images/class12/Screenshot 2025-06-27 at 3.52.44 PM.png"' \
+--form 'files=@"/Users/devrishibhardwaj/Downloads/images/class12/Screenshot 2025-06-27 at 3.52.48 PM.png"' \
+--form 'files=@"/Users/devrishibhardwaj/Downloads/images/class12/Screenshot 2025-06-27 at 3.52.56 PM.png"' \
+--form 'files=@"/Users/devrishibhardwaj/Downloads/images/class12/Screenshot 2025-06-27 at 3.53.04 PM.png"' \
+--form 'files=@"/Users/devrishibhardwaj/Downloads/images/class12/Screenshot 2025-06-27 at 3.53.11 PM.png"' \
+--form 'files=@"/Users/devrishibhardwaj/Downloads/images/class12/Screenshot 2025-06-27 at 3.53.19 PM.png"' \
+--form 'files=@"/Users/devrishibhardwaj/Downloads/images/class12/Screenshot 2025-06-27 at 3.53.32 PM.png"' \
+--form 'text_content=""'
+
+
+curl --location 'http://localhost:8001/process-json' \
+--header 'accept: application/json' \
+--form 'standard="Class 12"' \
+--form 'subject="physics"' \
+--form 'chapter="semiconductor"' \
+--form 'content_type="images"' \
+--form 'files=@"/Users/devrishibhardwaj/Downloads/images/class12/Screenshot 2025-06-27 at 3.51.27 PM.png"' \
+--form 'files=@"/Users/devrishibhardwaj/Downloads/images/class12/Screenshot 2025-06-27 at 3.51.33 PM.png"' \
+--form 'files=@"/Users/devrishibhardwaj/Downloads/images/class12/Screenshot 2025-06-27 at 3.51.37 PM.png"' \
+--form 'files=@"/Users/devrishibhardwaj/Downloads/images/class12/Screenshot 2025-06-27 at 3.51.45 PM.png"' \
+--form 'files=@"/Users/devrishibhardwaj/Downloads/images/class12/Screenshot 2025-06-27 at 3.51.53 PM.png"' \
+--form 'files=@"/Users/devrishibhardwaj/Downloads/images/class12/Screenshot 2025-06-27 at 3.52.00 PM.png"' \
+--form 'files=@"/Users/devrishibhardwaj/Downloads/images/class12/Screenshot 2025-06-27 at 3.52.09 PM.png"' \
+--form 'files=@"/Users/devrishibhardwaj/Downloads/images/class12/Screenshot 2025-06-27 at 3.52.17 PM.png"' \
+--form 'files=@"/Users/devrishibhardwaj/Downloads/images/class12/Screenshot 2025-06-27 at 3.52.25 PM.png"' \
+--form 'files=@"/Users/devrishibhardwaj/Downloads/images/class12/Screenshot 2025-06-27 at 3.52.34 PM.png"' \
+--form 'files=@"/Users/devrishibhardwaj/Downloads/images/class12/Screenshot 2025-06-27 at 3.52.44 PM.png"' \
+--form 'files=@"/Users/devrishibhardwaj/Downloads/images/class12/Screenshot 2025-06-27 at 3.52.48 PM.png"' \
+--form 'files=@"/Users/devrishibhardwaj/Downloads/images/class12/Screenshot 2025-06-27 at 3.52.56 PM.png"' \
+--form 'files=@"/Users/devrishibhardwaj/Downloads/images/class12/Screenshot 2025-06-27 at 3.53.04 PM.png"' \
+--form 'files=@"/Users/devrishibhardwaj/Downloads/images/class12/Screenshot 2025-06-27 at 3.53.11 PM.png"' \
+--form 'files=@"/Users/devrishibhardwaj/Downloads/images/class12/Screenshot 2025-06-27 at 3.53.19 PM.png"' \
+--form 'files=@"/Users/devrishibhardwaj/Downloads/images/class12/Screenshot 2025-06-27 at 3.53.32 PM.png"' \
+--form 'text_content=""'

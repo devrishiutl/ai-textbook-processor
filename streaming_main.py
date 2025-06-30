@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Streaming version of AI Textbook Processor with real-time progress updates.
-Provides better UX for long-running operations.
+AI Textbook Processor API
+Provides both streaming and JSON endpoints for processing educational content.
 """
 
 import warnings
@@ -9,7 +9,7 @@ import os
 import logging
 import json
 import asyncio
-from typing import AsyncGenerator
+from typing import AsyncGenerator, List, Optional
 
 # Suppress warnings and configure minimal logging
 warnings.filterwarnings("ignore")
@@ -23,13 +23,25 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 import tempfile
 import shutil
-from typing import List, Optional
+
 from tools import process_educational_content_tool, format_educational_output_tool
 from models import ProcessResponse
 from parsers import parse_educational_content
 
-app = FastAPI(title="AI Textbook Processor - Streaming", version="1.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+# Initialize FastAPI app
+app = FastAPI(
+    title="AI Textbook Processor",
+    version="1.0.0",
+    description="Processes educational content with both streaming and JSON endpoints"
+)
+
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
 
 async def stream_progress_updates(
     content_path: str,
@@ -104,32 +116,200 @@ async def stream_progress_updates(
             yield f"data: {json.dumps({'step': 11, 'status': 'failed', 'message': 'No educational content generated', 'progress': 100, 'error': True})}\n\n"
             return
         
-        # Success!
+        # Success! Split into smaller chunks to avoid buffer limits
         validation_results = result.get('validation_results', {})
-        success_response = {
+        
+        # First send completion status
+        completion_response = {
             'step': 11,
             'status': 'completed',
             'message': 'Educational content processed successfully!',
             'progress': 100,
-            'success': True,
-            'data': {
-                'content': structured_content.dict(),
-                'metadata': {
-                    'standard': standard,
-                    'subject': subject,
-                    'chapter': chapter,
-                    'content_type': content_type,
-                    'validation_details': {
-                        'status': 'passed',
-                        'gradeValidation': validation_results.get('grade_check', 'PASS'),
-                        'safetyAnalysis': validation_results.get('safety_check', 'PASS'),
-                        'relevanceCheck': validation_results.get('relevance_check', 'PASS')
-                    }
-                }
-            }
+            'success': True
         }
+        yield f"data: {json.dumps(completion_response)}\n\n"
+        await asyncio.sleep(0.1)
         
-        yield f"data: {json.dumps(success_response)}\n\n"
+        # Send metadata in parts
+        # Part 1: Basic metadata
+        basic_metadata_response = {
+            'step': 12,
+            'status': 'metadata',
+            'message': 'Sending basic metadata...',
+            'progress': 100,
+            'metadata': {
+                'standard': standard,
+                'subject': subject,
+                'chapter': chapter,
+                'content_type': content_type
+            },
+            'part': 1,
+            'total_parts': 2
+        }
+        yield f"data: {json.dumps(basic_metadata_response)}\n\n"
+        await asyncio.sleep(0.1)
+        
+        # Part 2: Validation details
+        validation_metadata_response = {
+            'step': 12,
+            'status': 'metadata',
+            'message': 'Sending validation details...',
+            'progress': 100,
+            'metadata': {
+                'validation_details': {
+                    'status': 'passed',
+                    'gradeValidation': validation_results.get('grade_check', 'PASS'),
+                    'safetyAnalysis': validation_results.get('safety_check', 'PASS'),
+                    'relevanceCheck': validation_results.get('relevance_check', 'PASS')
+                }
+            },
+            'part': 2,
+            'total_parts': 2
+        }
+        yield f"data: {json.dumps(validation_metadata_response)}\n\n"
+        await asyncio.sleep(0.1)
+        
+        # Send content in sections to avoid size limits
+        content_dict = structured_content.dict()
+        
+        # Send important notes in chunks if they're long
+        if content_dict.get('importantNotes'):
+            notes = content_dict['importantNotes']
+            # Split notes into chunks of roughly 500 characters each
+            chunk_size = 500
+            notes_chunks = [notes[i:i + chunk_size] for i in range(0, len(notes), chunk_size)]
+            total_chunks = len(notes_chunks)
+            
+            for idx, chunk in enumerate(notes_chunks, 1):
+                notes_response = {
+                    'step': 13,
+                    'status': 'content_notes',
+                    'message': f'Sending important notes (part {idx} of {total_chunks})...',
+                    'progress': 100,
+                    'content_type': 'importantNotes',
+                    'data': chunk,
+                    'part': idx,
+                    'total_parts': total_chunks
+                }
+                yield f"data: {json.dumps(notes_response)}\n\n"
+                await asyncio.sleep(0.1)
+        
+        # Send fill in the blanks in parts
+        if content_dict.get('fillInTheBlanks'):
+            blanks = content_dict['fillInTheBlanks']
+            # Send questions
+            blanks_q_response = {
+                'step': 14,
+                'status': 'content_blanks',
+                'message': 'Sending fill in the blanks questions...',
+                'progress': 100,
+                'content_type': 'fillInTheBlanks',
+                'data': {'questions': blanks['questions']},
+                'part': 1,
+                'total_parts': 2
+            }
+            yield f"data: {json.dumps(blanks_q_response)}\n\n"
+            await asyncio.sleep(0.1)
+            
+            # Send answers
+            blanks_a_response = {
+                'step': 14,
+                'status': 'content_blanks',
+                'message': 'Sending fill in the blanks answers...',
+                'progress': 100,
+                'content_type': 'fillInTheBlanks',
+                'data': {'answers': blanks['answers']},
+                'part': 2,
+                'total_parts': 2
+            }
+            yield f"data: {json.dumps(blanks_a_response)}\n\n"
+            await asyncio.sleep(0.1)
+        
+        # Send match the following in parts
+        if content_dict.get('matchTheFollowing'):
+            match = content_dict['matchTheFollowing']
+            # Send column A
+            match_a_response = {
+                'step': 15,
+                'status': 'content_match',
+                'message': 'Sending match the following column A...',
+                'progress': 100,
+                'content_type': 'matchTheFollowing',
+                'data': {'column_a': match['column_a']},
+                'part': 1,
+                'total_parts': 3
+            }
+            yield f"data: {json.dumps(match_a_response)}\n\n"
+            await asyncio.sleep(0.1)
+            
+            # Send column B
+            match_b_response = {
+                'step': 15,
+                'status': 'content_match',
+                'message': 'Sending match the following column B...',
+                'progress': 100,
+                'content_type': 'matchTheFollowing',
+                'data': {'column_b': match['column_b']},
+                'part': 2,
+                'total_parts': 3
+            }
+            yield f"data: {json.dumps(match_b_response)}\n\n"
+            await asyncio.sleep(0.1)
+            
+            # Send answers
+            match_ans_response = {
+                'step': 15,
+                'status': 'content_match',
+                'message': 'Sending match the following answers...',
+                'progress': 100,
+                'content_type': 'matchTheFollowing',
+                'data': {'answers': match['answers']},
+                'part': 3,
+                'total_parts': 3
+            }
+            yield f"data: {json.dumps(match_ans_response)}\n\n"
+            await asyncio.sleep(0.1)
+        
+        # Send question answers in parts
+        if content_dict.get('questionAnswer'):
+            qa = content_dict['questionAnswer']
+            # Send questions
+            qa_q_response = {
+                'step': 16,
+                'status': 'content_qa',
+                'message': 'Sending questions...',
+                'progress': 100,
+                'content_type': 'questionAnswer',
+                'data': {'questions': qa['questions']},
+                'part': 1,
+                'total_parts': 2
+            }
+            yield f"data: {json.dumps(qa_q_response)}\n\n"
+            await asyncio.sleep(0.1)
+            
+            # Send answers
+            qa_a_response = {
+                'step': 16,
+                'status': 'content_qa',
+                'message': 'Sending answers...',
+                'progress': 100,
+                'content_type': 'questionAnswer',
+                'data': {'answers': qa['answers']},
+                'part': 2,
+                'total_parts': 2
+            }
+            yield f"data: {json.dumps(qa_a_response)}\n\n"
+            await asyncio.sleep(0.1)
+        
+        # Final completion message
+        final_response = {
+            'step': 17,
+            'status': 'final',
+            'message': 'All content delivered successfully!',
+            'progress': 100,
+            'complete': True
+        }
+        yield f"data: {json.dumps(final_response)}\n\n"
         
     except Exception as e:
         logger.error(f"Streaming error: {str(e)}")
@@ -144,6 +324,14 @@ async def stream_progress_updates(
                 except Exception as cleanup_error:
                     logger.error(f"Failed to cleanup temp file {path}: {cleanup_error}")
                     pass
+
+@app.get("/health")
+async def health_check():
+    """Simple health check endpoint"""
+    return {
+        "status": "healthy",
+        "service": "AI Textbook Processor"
+    }
 
 @app.post("/process-stream")
 async def process_educational_content_stream(
@@ -211,9 +399,8 @@ async def process_educational_content_stream(
         logger.error(f"Stream setup error: {str(e)}")
         raise HTTPException(500, f"Internal processing error: {str(e)}")
 
-# Keep the original non-streaming endpoint for compatibility
-@app.post("/process", response_model=ProcessResponse)
-async def process_educational_content(
+@app.post("/process-json")
+async def process_educational_content_json(
     standard: str = Form(...),
     subject: str = Form(...),
     chapter: str = Form(...),
@@ -221,7 +408,7 @@ async def process_educational_content(
     files: Optional[List[UploadFile]] = File(None),
     text_content: Optional[str] = Form(None)
 ):
-    """Original non-streaming endpoint for compatibility"""
+    """Process educational content and return complete JSON response"""
     try:
         # Input validation
         if content_type in ["pdf", "images"] and not files:
@@ -229,27 +416,26 @@ async def process_educational_content(
         if content_type == "text" and not text_content:
             raise HTTPException(400, "Text content required")
         
-        # Process content
-        if content_type == "text":
-            result = process_educational_content_tool(text_content, standard, subject, chapter, "text")
-        elif content_type == "pdf":
-            if len(files) != 1 or not files[0].filename.lower().endswith('.pdf'):
-                raise HTTPException(400, "Exactly one PDF file required")
-            
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
-                shutil.copyfileobj(files[0].file, temp_file)
-                temp_path = temp_file.name
-            
-            try:
-                result = process_educational_content_tool(temp_path, standard, subject, chapter, "pdf")
-            finally:
-                os.unlink(temp_path)
+        # Prepare content for processing
+        content_path = None
+        temp_paths = []
+        
+        try:
+            # Handle different content types
+            if content_type == "text":
+                content_path = text_content
+            elif content_type == "pdf":
+                if len(files) != 1 or not files[0].filename.lower().endswith('.pdf'):
+                    raise HTTPException(400, "Exactly one PDF file required")
                 
-        elif content_type == "images":
-            allowed_extensions = {'.png', '.jpg', '.jpeg', '.gif', '.bmp'}
-            temp_paths = []
-            
-            try:
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
+                    shutil.copyfileobj(files[0].file, temp_file)
+                    content_path = temp_file.name
+                    temp_paths.append(content_path)
+                    
+            elif content_type == "images":
+                allowed_extensions = {'.png', '.jpg', '.jpeg', '.gif', '.bmp'}
+                
                 for file in files:
                     ext = os.path.splitext(file.filename.lower())[1]
                     if ext not in allowed_extensions:
@@ -259,240 +445,104 @@ async def process_educational_content(
                         shutil.copyfileobj(file.file, temp_file)
                         temp_paths.append(temp_file.name)
                 
-                result = process_educational_content_tool(temp_paths, standard, subject, chapter, "images")
-            finally:
-                for path in temp_paths:
-                    try: os.unlink(path)
-                    except: pass
-        else:
-            raise HTTPException(400, "Invalid content_type")
-        
-        # Check for processing errors
-        if result and (result.get('error') or result.get('processing_status') == 'FAILED'):
+                content_path = temp_paths
+            else:
+                raise HTTPException(400, "Invalid content_type")
+
+            # Process the content
+            result = process_educational_content_tool(content_path, standard, subject, chapter, content_type)
+            
+            # Check for processing errors
+            if result and (result.get('error') or result.get('processing_status') == 'FAILED'):
+                validation_results = result.get('validation_results', {})
+                return {
+                    "success": False,
+                    "message": "Processing failed",
+                    "error": f"Validation failed: {validation_results.get('reason', 'Unknown error')}",
+                    "metadata": {
+                        "standard": standard,
+                        "subject": subject,
+                        "chapter": chapter,
+                        "content_type": content_type,
+                        "validation_details": {
+                            "status": "failed",
+                            "gradeValidation": validation_results.get('grade_check', 'UNKNOWN'),
+                            "safetyAnalysis": validation_results.get('safety_check', 'UNKNOWN'),
+                            "relevanceCheck": validation_results.get('relevance_check', 'UNKNOWN'),
+                            "reason": validation_results.get('reason', 'Processing failed')
+                        }
+                    }
+                }
+            
+            # Format and parse the output
+            raw_output = format_educational_output_tool(result)
+            structured_content = parse_educational_content(raw_output)
+            
+            # Check if content is empty
+            if not any([
+                structured_content.importantNotes,
+                structured_content.fillInTheBlanks.questions,
+                structured_content.matchTheFollowing.column_a,
+                structured_content.questionAnswer.questions
+            ]):
+                return {
+                    "success": False,
+                    "message": "Content validation failed",
+                    "error": "No educational content generated",
+                    "metadata": {
+                        "standard": standard,
+                        "subject": subject,
+                        "chapter": chapter,
+                        "content_type": content_type
+                    }
+                }
+            
+            # Success response
             validation_results = result.get('validation_results', {})
-            return ProcessResponse(
-                success=False,
-                message="Processing failed",
-                error=f"Validation failed: {validation_results.get('reason', 'Unknown error')}",
-                metadata={
+            return {
+                "success": True,
+                "message": "Educational content processed successfully",
+                "content": structured_content.dict(),
+                "metadata": {
                     "standard": standard,
                     "subject": subject,
                     "chapter": chapter,
                     "content_type": content_type,
+                    "files_processed": len(files) if files else 0,
                     "validation_details": {
-                        "status": "failed",
-                        "gradeValidation": validation_results.get('grade_check', 'UNKNOWN'),
-                        "safetyAnalysis": validation_results.get('safety_check', 'UNKNOWN'),
-                        "relevanceCheck": validation_results.get('relevance_check', 'UNKNOWN'),
-                        "reason": validation_results.get('reason', 'Processing failed')
+                        "status": "passed",
+                        "gradeValidation": validation_results.get('grade_check', 'PASS'),
+                        "safetyAnalysis": validation_results.get('safety_check', 'PASS'),
+                        "relevanceCheck": validation_results.get('relevance_check', 'PASS')
                     }
                 }
-            )
-        
-        # Parse output
-        raw_output = format_educational_output_tool(result)
-        structured_content = parse_educational_content(raw_output)
-        
-        # Check if content is empty
-        if not any([
-            structured_content.importantNotes,
-            structured_content.fillInTheBlanks.questions,
-            structured_content.matchTheFollowing.column_a,
-            structured_content.questionAnswer.questions
-        ]):
-            return ProcessResponse(
-                success=False,
-                message="Content validation failed",
-                error="No educational content generated",
-                metadata={"standard": standard, "subject": subject, "chapter": chapter, "content_type": content_type}
-            )
-        
-        # Success response
-        validation_results = result.get('validation_results', {})
-        return ProcessResponse(
-            success=True,
-            message="Educational content processed successfully",
-            content=structured_content,
-            metadata={
-                "standard": standard,
-                "subject": subject,
-                "chapter": chapter,
-                "content_type": content_type,
-                "files_processed": len(files) if files else 0,
-                "validation_details": {
-                    "status": "passed",
-                    "gradeValidation": validation_results.get('grade_check', 'PASS'),
-                    "safetyAnalysis": validation_results.get('safety_check', 'PASS'),
-                    "relevanceCheck": validation_results.get('relevance_check', 'PASS')
-                }
             }
-        )
-        
+            
+        finally:
+            # Clean up temporary files
+            for path in temp_paths:
+                try:
+                    if os.path.exists(path):
+                        os.unlink(path)
+                except Exception as cleanup_error:
+                    logger.error(f"Failed to cleanup temp file {path}: {cleanup_error}")
+                    pass
+                    
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error: {str(e)}")
-        return ProcessResponse(
-            success=False,
-            message="Internal processing error",
-            error=str(e),
-            metadata={"standard": standard, "subject": subject, "chapter": chapter, "content_type": content_type}
-        )
-
-@app.get("/streaming-demo")
-async def streaming_demo():
-    """Demo page for testing streaming functionality"""
-    
-    html_content = '''<!DOCTYPE html>
-<html>
-<head>
-    <title>AI Textbook Processor - Streaming Demo</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
-        .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; }
-        .progress-container { margin: 20px 0; }
-        .progress-bar { width: 100%; height: 20px; background: #e0e0e0; border-radius: 10px; overflow: hidden; }
-        .progress-fill { height: 100%; background: linear-gradient(90deg, #4CAF50, #45a049); transition: width 0.3s ease; }
-        .status { margin: 10px 0; padding: 10px; border-radius: 5px; }
-        .status.starting { background: #e3f2fd; border-left: 4px solid #2196f3; }
-        .status.extracting { background: #fff3e0; border-left: 4px solid #ff9800; }
-        .status.validating { background: #fce4ec; border-left: 4px solid #e91e63; }
-        .status.processing { background: #f3e5f5; border-left: 4px solid #9c27b0; }
-        .status.generating { background: #e8f5e8; border-left: 4px solid #4caf50; }
-        .status.completed { background: #e8f5e8; border-left: 4px solid #4caf50; font-weight: bold; }
-        .status.failed { background: #ffebee; border-left: 4px solid #f44336; }
-        .form-group { margin: 15px 0; }
-        .form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
-        .form-group input, select, textarea { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
-        .btn { background: #2196f3; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; }
-        .btn:hover { background: #1976d2; }
-        .btn:disabled { background: #ccc; cursor: not-allowed; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>🤖 AI Textbook Processor - Streaming Demo</h1>
-        <p>Test the streaming functionality with real-time progress updates!</p>
-        
-        <form id="streamingForm">
-            <div class="form-group">
-                <label>Standard/Grade:</label>
-                <input type="text" name="standard" value="Class 6" required>
-            </div>
-            <div class="form-group">
-                <label>Subject:</label>
-                <input type="text" name="subject" value="Science" required>
-            </div>
-            <div class="form-group">
-                <label>Chapter:</label>
-                <input type="text" name="chapter" value="Scientific Method" required>
-            </div>
-            <div class="form-group">
-                <label>Content Type:</label>
-                <select name="content_type">
-                    <option value="text">Text</option>
-                    <option value="pdf">PDF</option>
-                    <option value="images">Images</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Text Content:</label>
-                <textarea name="text_content" rows="4" placeholder="Enter educational content here...">The scientific method is a systematic approach to understanding the natural world through observation, hypothesis formation, experimentation, and analysis.</textarea>
-            </div>
-            <button type="submit" class="btn" id="submitBtn">Start Streaming Process</button>
-        </form>
-        
-        <div class="progress-container" id="progressContainer" style="display: none;">
-            <h3>Processing Progress:</h3>
-            <div class="progress-bar">
-                <div class="progress-fill" id="progressFill" style="width: 0%;"></div>
-            </div>
-            <div id="statusMessages"></div>
-        </div>
-        
-        <div id="results" style="margin-top: 20px;"></div>
-    </div>
-    
-    <script>
-        document.getElementById('streamingForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            const formData = new FormData(this);
-            const submitBtn = document.getElementById('submitBtn');
-            const progressContainer = document.getElementById('progressContainer');
-            const progressFill = document.getElementById('progressFill');
-            const statusMessages = document.getElementById('statusMessages');
-            const results = document.getElementById('results');
-            
-            // Reset UI
-            submitBtn.disabled = true;
-            submitBtn.textContent = 'Processing...';
-            progressContainer.style.display = 'block';
-            statusMessages.innerHTML = '';
-            results.innerHTML = '';
-            progressFill.style.width = '0%';
-            
-            try {
-                const response = await fetch('/process-stream', {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
-                
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    
-                    const chunk = decoder.decode(value);
-                    const lines = chunk.split('\\n');
-                    
-                    for (const line of lines) {
-                        if (line.startsWith('data: ')) {
-                            try {
-                                const data = JSON.parse(line.slice(6));
-                                
-                                // Update progress bar
-                                progressFill.style.width = data.progress + '%';
-                                
-                                // Add status message
-                                const statusDiv = document.createElement('div');
-                                statusDiv.className = 'status ' + data.status;
-                                statusDiv.innerHTML = `<strong>Step ${data.step}:</strong> ${data.message}`;
-                                statusMessages.appendChild(statusDiv);
-                                
-                                // Scroll to latest message
-                                statusDiv.scrollIntoView({ behavior: 'smooth' });
-                                
-                                // Handle completion
-                                if (data.success) {
-                                    results.innerHTML = '<h3>✅ Success!</h3><pre>' + JSON.stringify(data.data, null, 2) + '</pre>';
-                                } else if (data.error) {
-                                    results.innerHTML = '<h3>❌ Error</h3><p>' + data.message + '</p>';
-                                }
-                                
-                            } catch (parseError) {
-                                console.error('Parse error:', parseError);
-                            }
-                        }
-                    }
-                }
-                
-            } catch (error) {
-                console.error('Streaming error:', error);
-                results.innerHTML = '<h3>❌ Connection Error</h3><p>' + error.message + '</p>';
-            } finally {
-                submitBtn.disabled = false;
-                submitBtn.textContent = 'Start Streaming Process';
+        return {
+            "success": False,
+            "message": "Internal processing error",
+            "error": str(e),
+            "metadata": {
+                "standard": standard,
+                "subject": subject,
+                "chapter": chapter,
+                "content_type": content_type
             }
-        });
-    </script>
-</body>
-</html>'''
-    
-    from fastapi.responses import HTMLResponse
-    return HTMLResponse(content=html_content)
+        }
 
 if __name__ == "__main__":
     import uvicorn
