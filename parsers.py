@@ -4,6 +4,12 @@ from models import StructuredContent, FillInTheBlanks, MatchTheFollowing, Questi
 def parse_educational_content(raw_content: str) -> StructuredContent:
     """Parse raw content into structured format"""
     
+    # Debug: Log the raw content to see what we're working with
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"Raw content length: {len(raw_content)}")
+    logger.info(f"Raw content preview: {raw_content[:500]}...")
+    
     sections = {
         'grade_validation': '',
         'study_notes': '',
@@ -30,6 +36,7 @@ def parse_educational_content(raw_content: str) -> StructuredContent:
               '### FILL-IN-THE-BLANKS:' in line):
             current_section = 'fill_blanks'
         elif ('MATCH-THE-FOLLOWING EXERCISES' in line or
+              'MATCH-THE-FOLLOWING EXERCISES:' in line or
               '### MATCH-THE-FOLLOWING EXERCISES:' in line):
             current_section = 'match_following'
         elif ('SUBJECTIVE QUESTIONS' in line or
@@ -39,6 +46,12 @@ def parse_educational_content(raw_content: str) -> StructuredContent:
             continue
         elif current_section and line:
             sections[current_section] += line + '\n'
+    
+    # Debug: Log what sections we found
+    for section_name, section_content in sections.items():
+        logger.info(f"Section '{section_name}': {len(section_content)} characters")
+        if section_content:
+            logger.info(f"  Preview: {section_content[:100]}...")
     
     return StructuredContent(
         importantNotes=sections['study_notes'].strip(),
@@ -51,6 +64,9 @@ def parse_fill_in_blanks(content: str) -> FillInTheBlanks:
     """Parse fill-in-blanks section - handles both old and new formats"""
     questions = {}
     answers = {}
+    
+    if not content or content.strip() == "":
+        return FillInTheBlanks(questions=questions, answers=answers)
     
     # Try old format first (inline answers)
     pattern = r'(\d+)\.\s*(.*?)\s*\n\s*Answer:\s*(.*?)(?=\n\d+\.|\n\n|$)'
@@ -74,11 +90,11 @@ def parse_fill_in_blanks(content: str) -> FillInTheBlanks:
         questions_part = parts[0]
         answers_part = parts[1] if len(parts) > 1 else ''
         
-        # Extract questions
+        # Extract questions - look for numbered items with blanks
         question_matches = re.findall(r'(\d+)\.\s*(.*?)(?=\n\d+\.|\n\n|ANSWERS|###|$)', questions_part, re.DOTALL)
         for num, question in question_matches:
-            if '______' in question:  # Only questions with blanks
-                questions[num] = question.strip()
+            # Accept questions with blanks or just numbered items
+            questions[num] = question.strip()
         
         # Extract answers
         if answers_part and answers_part.strip():
@@ -157,6 +173,9 @@ def parse_questions_answers(content: str) -> QuestionAnswer:
     """Parse questions and answers section - handles both old and new formats"""
     questions = {}
     answers = {}
+    
+    if not content or content.strip() == "":
+        return QuestionAnswer(questions=questions, answers=answers)
     
     # Try old format first (Q1: question A1: answer)
     pattern = r'Q(\d+):\s*(.*?)\s*A\1:\s*(.*?)(?=Q\d+:|$)'
