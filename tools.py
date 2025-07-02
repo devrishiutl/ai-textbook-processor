@@ -2,8 +2,6 @@ import base64
 import re
 import logging
 from config import azure_client, AZURE_DEPLOYMENT_NAME
-import cv2
-import numpy as np
 from PIL import Image
 import io
 
@@ -44,20 +42,57 @@ def call_gpt(prompt, content="", max_tokens=2000):
     except Exception as e:
         return f"ERROR: {str(e)}"
 
-def encode_image_base64(img_path):
-    """Encode image to base64"""
-    try:
-        with open(img_path, "rb") as img_file:
-            return base64.b64encode(img_file.read()).decode("utf-8")
-    except Exception as e:
-        return f"ERROR: {str(e)}"
+
 
 # =============================================================================
 # 2. CONTENT EXTRACTION FUNCTIONS (Called first in processing)
 # =============================================================================
 @traceable(name="pdf_content_extraction")
 def extract_pdf_content(pdf_path):
-    """Extract PDF text using Docling"""
+    """Extract PDF text using Tika first, Docling as fallback"""
+    try:
+        # Try Tika first (fast and reliable)
+        logger.info(f"Trying Tika extraction first for: {pdf_path}")
+        tika_result = extract_pdf_content_tika_fallback(pdf_path)
+        
+        # If Tika succeeds and extracts good content, use it
+        if not tika_result.startswith("ERROR") and len(tika_result.strip()) > 1000:
+            logger.info(f"Tika extraction successful: {len(tika_result)} characters")
+            return tika_result
+        
+        # If Tika fails or extracts insufficient content, try Docling
+        logger.warning("Tika failed or extracted insufficient content, trying Docling")
+        return extract_pdf_content_docling(pdf_path)
+        
+    except Exception as e:
+        logger.warning(f"Tika extraction failed: {str(e)}, trying Docling fallback")
+        return extract_pdf_content_docling(pdf_path)
+
+def extract_pdf_content_tika_fallback(pdf_path: str) -> str:
+    """Primary PDF extraction using Tika (fast and reliable)"""
+    try:
+        # Try to import and use Tika
+        from tika_extractor import extract_pdf_content_tika, is_tika_available
+        
+        if not is_tika_available():
+            return "ERROR: Tika extraction failed. Tika server not available."
+        
+        logger.info(f"Extracting text from PDF using Tika: {pdf_path}")
+        result = extract_pdf_content_tika(pdf_path)
+        
+        if result.startswith("ERROR"):
+            return f"ERROR: Tika extraction failed: {result}"
+        
+        logger.info(f"Tika extraction successful: {len(result)} characters")
+        return result
+        
+    except ImportError:
+        return "ERROR: Tika extraction failed. Tika module not available."
+    except Exception as e:
+        return f"ERROR: Tika extraction failed: {str(e)}"
+
+def extract_pdf_content_docling(pdf_path):
+    """Fallback PDF extraction using Docling (for complex cases)"""
     try:
         from docling.document_converter import DocumentConverter
         converter = DocumentConverter()
@@ -68,9 +103,15 @@ def extract_pdf_content(pdf_path):
             if element.text.strip():
                 content += element.text.strip() + "\n\n"
         
+        if not content or len(content.strip()) < 50:
+            return "ERROR: Docling extracted insufficient content"
+        
+        logger.info(f"Docling extraction successful: {len(content)} characters")
         return content
+        
     except Exception as e:
-        return f"ERROR: {str(e)}"
+        logger.error(f"Docling extraction failed: {str(e)}")
+        return f"ERROR: Docling extraction failed - {str(e)}"
 
 def preprocess_image(image_path: str, target_size=(800, 800), quality=85) -> str:
     """
@@ -266,9 +307,15 @@ Q1: [Write a complete answer to question 1 based on the content]
 Q2: [Write a complete answer to question 2 based on the content]
 Q3: [Write a complete answer to question 3 based on the content]
 
-CRITICAL: You must fill in ALL sections completely using ONLY the provided content. Do not generate content for {subject} - {chapter} if it's not present in the source material."""
+CRITICAL: You must fill in ALL sections completely using ONLY the provided content. Do not generate content for {subject} - {chapter} if it's not present in the source material.
+
+IMPORTANT: Make sure to include the exact section headers as shown above (STUDY NOTES:, FILL-IN-THE-BLANKS:, etc.)"""
     
     result = call_gpt(prompt, text, max_tokens=3000)  # Increased for comprehensive content
+    
+    # Debug: Log the generated content
+    logger.info(f"Generated content length: {len(result)}")
+    logger.info(f"Generated content preview: {result[:500]}...")
     
     # Validate that all sections are present
     required_sections = ["STUDY NOTES:", "FILL-IN-THE-BLANKS:", "MATCH-THE-FOLLOWING EXERCISES:", "SUBJECTIVE QUESTIONS:"]

@@ -125,9 +125,9 @@ def validation_router(state):
     processing_status = state.get("processing_status", "UNKNOWN")
     return "failed" if processing_status == "FAILED" else "continue"
 
-def content_normalization_node(state):
-    """Pass-through node"""
-    return {**state, "original_content": state["content"]}
+# def content_normalization_node(state):
+#     """Pass-through node"""
+#     return {**state, "original_content": state["content"]}
 
 def generate_all_content_node(state):
     """Generate all educational content in one LLM call"""
@@ -198,23 +198,31 @@ def build_graph():
     
     # Add nodes - removed content_extraction_node as it's unnecessary
     graph.add_node("comprehensive_validation", comprehensive_validation_node)
-    graph.add_node("normalize_content", content_normalization_node)
+    # graph.add_node("normalize_content", content_normalization_node)
     graph.add_node("generate_all_content", generate_all_content_node)
     graph.add_node("format_output", output_formatter_node)
     
     # Define flow - start directly with validation
     graph.set_entry_point("comprehensive_validation")
-    
+
     graph.add_conditional_edges(
         "comprehensive_validation",
         validation_router,
         {
-            "continue": "normalize_content",
+            "continue": "generate_all_content",
             "failed": END
         }
-    )
+    )    
+    # graph.add_conditional_edges(
+    #     "comprehensive_validation",
+    #     validation_router,
+    #     {
+    #         "continue": "normalize_content",
+    #         "failed": END
+    #     }
+    # )
     
-    graph.add_edge("normalize_content", "generate_all_content")
+    # graph.add_edge("normalize_content", "generate_all_content")
     graph.add_edge("generate_all_content", "format_output")
     graph.add_edge("format_output", END)
     
