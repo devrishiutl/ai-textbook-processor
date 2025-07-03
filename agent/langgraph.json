@@ -1,0 +1,20 @@
+{
+  "graphs": {
+    "ai_textbook_processor": "app:app"
+  },
+  "dependencies": [
+    "openai",
+    "langchain",
+    "langchain-core",
+    "langgraph",
+    "langsmith",
+    "python-dotenv",
+    "pillow",
+    "docling",
+    "fastapi",
+    "uvicorn",
+    "python-multipart",
+    "reportlab",
+    "requests"
+  ]
+} 
