@@ -1,25 +1,20 @@
 """
-Configuration Settings
+Application Settings
 """
 import os
 from dotenv import load_dotenv
-from openai import AzureOpenAI
 
-# Load environment variables from .env file
 load_dotenv()
 
-# Azure OpenAI Configuration
-AZURE_ENDPOINT = os.getenv("AZURE_OPENAI_API_BASE")
-AZURE_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
-AZURE_DEPLOYMENT_NAME = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
-AZURE_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION")
+# Import LLM config from configuration
+from config.configuration import config
 
-# Initialize Azure client
-azure_client = AzureOpenAI(
-    azure_endpoint=AZURE_ENDPOINT,
-    api_key=AZURE_API_KEY,
-    api_version=AZURE_API_VERSION
-)
+# Azure OpenAI Configuration (from config)
+AZURE_ENDPOINT = config.AZURE_ENDPOINT
+AZURE_API_KEY = config.AZURE_API_KEY
+AZURE_DEPLOYMENT_NAME = config.AZURE_DEPLOYMENT_NAME
+AZURE_API_VERSION = config.AZURE_API_VERSION
+azure_client = config.azure_client
 
 # Application Settings
 MAX_FILE_SIZE_PDF = 100 * 1024 * 1024  # 100MB

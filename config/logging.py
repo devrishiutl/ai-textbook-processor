@@ -4,18 +4,28 @@ Logging Configuration with LangSmith Integration
 import logging
 import sys
 import os
-from config.settings import LOG_LEVEL, LOG_FORMAT
-from config.configuration import LANGSMITH_API_KEY, LANGSMITH_PROJECT, LANGSMITH_ENDPOINT
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Get logging settings directly
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
 def setup_logging():
     """Setup logging configuration with LangSmith integration"""
+    # Ensure logs directory exists
+    logs_dir = "logs"
+    if not os.path.exists(logs_dir):
+        os.makedirs(logs_dir)
+    
     # Configure root logger
     logging.basicConfig(
         level=getattr(logging, LOG_LEVEL.upper()),
         format=LOG_FORMAT,
         handlers=[
             logging.StreamHandler(sys.stdout),
-            logging.FileHandler('app.log')
+            logging.FileHandler(os.path.join(logs_dir, 'app.log'))
         ]
     )
     
@@ -28,6 +38,10 @@ def setup_logging():
     logger = logging.getLogger(__name__)
     
     # Setup LangSmith if API key is available
+    LANGSMITH_API_KEY = os.getenv("LANGSMITH_API_KEY")
+    LANGSMITH_PROJECT = os.getenv("LANGSMITH_PROJECT", "ai-textbook-processor")
+    LANGSMITH_ENDPOINT = os.getenv("LANGSMITH_ENDPOINT", "https://api.smith.langchain.com")
+    
     if LANGSMITH_API_KEY:
         try:
             # Set environment variables for LangSmith
