@@ -9,10 +9,10 @@ from openai import AzureOpenAI
 load_dotenv()
 
 # Azure OpenAI Configuration
-AZURE_ENDPOINT = os.getenv("AZURE_OPENAI_API_BASE", "https://your-resource.openai.azure.com/")
-AZURE_API_KEY = os.getenv("AZURE_OPENAI_API_KEY", "your-api-key")
-AZURE_DEPLOYMENT_NAME = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-4")
-AZURE_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION", "2024-02-15-preview")
+AZURE_ENDPOINT = os.getenv("AZURE_OPENAI_API_BASE")
+AZURE_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
+AZURE_DEPLOYMENT_NAME = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
+AZURE_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION")
 
 # Initialize Azure client
 azure_client = AzureOpenAI(
@@ -41,9 +41,4 @@ TEMPERATURE = 0.1  # LLM temperature setting
 
 # Validation Settings
 MIN_CONTENT_LENGTH = 50  # Minimum content length for validation
-MIN_MEANINGFUL_CHARS = 20  # Minimum meaningful characters for validation
-
-# LangSmith Configuration
-LANGSMITH_API_KEY = os.getenv("LANGSMITH_API_KEY", None)
-LANGSMITH_PROJECT = os.getenv("LANGSMITH_PROJECT", "ai-textbook-processor")
-LANGSMITH_ENDPOINT = os.getenv("LANGSMITH_ENDPOINT", "https://api.smith.langchain.com") 
+MIN_MEANINGFUL_CHARS = 20  # Minimum meaningful characters for validation 

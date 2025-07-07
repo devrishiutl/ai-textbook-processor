@@ -4,7 +4,8 @@ Logging Configuration with LangSmith Integration
 import logging
 import sys
 import os
-from config.settings import LOG_LEVEL, LOG_FORMAT, LANGSMITH_API_KEY, LANGSMITH_PROJECT, LANGSMITH_ENDPOINT
+from config.settings import LOG_LEVEL, LOG_FORMAT
+from config.configuration import LANGSMITH_API_KEY, LANGSMITH_PROJECT, LANGSMITH_ENDPOINT
 
 def setup_logging():
     """Setup logging configuration with LangSmith integration"""
