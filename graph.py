@@ -1,229 +1,198 @@
-from langgraph.graph import StateGraph, END
-from typing import TypedDict, Annotated, Sequence, Dict, Optional
-from langchain_core.messages import BaseMessage
-import operator
-import re
+"""
+LangGraph Workflow for Educational Content Processing
+"""
 import logging
+from typing import Dict, Any
+from langgraph.graph import StateGraph, END
+from models.state import ProcessingState
 
-# Create logger for this module
 logger = logging.getLogger(__name__)
-from tools import (
-    combined_validation_tool,
-    generate_all_content_tool
-)
 
-class AgentState(TypedDict):
-    messages: Annotated[Sequence[BaseMessage], operator.add]
-    content: Optional[str]
-    standard: Optional[str]
-    subject: Optional[str]
-    chapter: Optional[str]
-    validation_results: Optional[Dict[str, str]]
-    generated_content: Optional[Dict[str, str]]
-    processing_status: Optional[str]
-    error_details: Optional[str]
-
-def content_extraction_node(state):
-    """Extract content and parameters"""
-    messages = state["messages"]
-    content = None
-    standard = state.get('standard')
-    subject = state.get('subject')
-    chapter = state.get('chapter')
-    
-    for message in messages:
-        if message.get("role") == "system":
-            system_content = message.get("content", "")
-            if "specializing in" in system_content and "for" in system_content:
-                match = re.search(r'specializing in (.+?) for (.+?) students, focusing on (.+?)\.', system_content)
-                if match and not all([subject, standard, chapter]):
-                    subject = subject or match.group(1)
-                    standard = standard or match.group(2) 
-                    chapter = chapter or match.group(3)
-        
-        elif message.get("role") == "user" and message.get("content", "").startswith("Educational content to process:"):
-            content = message.get("content", "").replace("Educational content to process:", "").strip()
-    
-    if not content:
-        return {
-            **state,
-            "processing_status": "FAILED",
-            "error_details": "No educational content found"
-        }
-    
-    return {
-        **state,
-        "content": content,
-        "standard": standard,
-        "subject": subject,
-        "chapter": chapter,
-        "processing_status": "CONTINUE"
-    }
-
-def comprehensive_validation_node(state):
-    """Combined validation checks (grade, safety, relevance) in one LLM call"""
+def extract_content_node(state: ProcessingState) -> ProcessingState:
+    """Extract content from files or messages - single source only"""
     try:
-        validation_result = combined_validation_tool(
-            state["content"], 
-            state["standard"], 
-            state["subject"], 
-            state["chapter"]
-        )
+        state["processing_steps"].append("extract_content")
         
-        # Handle error case
-        if "error" in validation_result:
-            return {
-                **state,
-                "processing_status": "FAILED",
-                "validation_results": {
-                    "grade_check": "ERROR",
-                    "safety_check": "ERROR",
-                    "relevance_check": "ERROR",
-                    "status": "FAILED",
-                    "reason": validation_result["error"]
-                },
-                "error_details": f"Validation error: {validation_result['error']}"
-            }
+        # Extract parameters from messages
+        messages = state.get("messages", [])
+        from core.helpers import extract_content_from_messages
+        content, standard, subject, chapter = extract_content_from_messages(messages)
         
-        # Check overall status
-        if validation_result["overall_status"] == "FAILED":
-            return {
-                **state,
-                "processing_status": "FAILED",
-                "validation_results": {
-                    "grade_check": validation_result["grade_check"],
-                    "safety_check": validation_result["safety_check"],
-                    "relevance_check": validation_result["relevance_check"],
-                    "status": "FAILED",
-                    "reason": validation_result["reason"]
-                },
-                "error_details": f"Validation failed: {validation_result['reason']}"
-            }
+        if content:
+            # Content from messages
+            state["content"] = content
+            state["standard"] = standard
+            state["subject"] = subject
+            state["chapter"] = chapter
+        else:
+            # Extract from files - single source only
+            pdf_path = state.get("pdf_path")
+            image_paths = state.get("image_paths", [])
+            
+            # Validate single source requirement
+            has_pdf = pdf_path is not None and pdf_path.strip()
+            has_images = image_paths is not None and len(image_paths) > 0
+            
+            if has_pdf and has_images:
+                state["error_message"] = "Only single source type allowed: provide either pdf_path OR image_paths, not both"
+                return state
+            
+            if not has_pdf and not has_images:
+                state["error_message"] = "Must provide either pdf_path OR image_paths"
+                return state
+            
+            # Extract content based on source type
+            if has_pdf:
+                # PDF only
+                from core.extractors import extract_content_from_pdf
+                extracted_content = extract_content_from_pdf(pdf_path)
+            else:
+                # Images only - use vision processing
+                from core.generators import generate_content_from_vision
+                generated_content = generate_content_from_vision(image_paths, standard, subject, chapter)
+                
+                if not generated_content.get("success"):
+                    state["error_message"] = generated_content.get("error", "Failed to process images")
+                    return state
+                
+                # Extract content from vision results
+                content_dict = generated_content.get("content", {})
+                if isinstance(content_dict, dict):
+                    notes = content_dict.get("importantNotes", "")
+                    if notes and notes != "No content available to create study notes.":
+                        extracted_content = notes
+                    else:
+                        state["error_message"] = "No meaningful content could be extracted from the images"
+                        return state
+                else:
+                    state["error_message"] = "Invalid content structure from vision processing"
+                    return state
+            
+            if extracted_content.startswith("ERROR"):
+                state["error_message"] = extracted_content
+                return state
+            
+            state["content"] = extracted_content
         
-        # All validations passed
-        return {
-            **state,
-            "processing_status": "CONTINUE",
-            "validation_results": {
-                "grade_check": validation_result["grade_check"],
-                "safety_check": validation_result["safety_check"],
-                "relevance_check": validation_result["relevance_check"],
-                "status": "PASSED",
-                "reason": "All validations passed"
-            }
-        }
+        return state
         
     except Exception as e:
-        return {
-            **state,
-            "processing_status": "FAILED",
-            "error_details": f"Validation error: {str(e)}"
-        }
+        logger.error(f"Error in extract_content_node: {str(e)}")
+        state["error_message"] = f"Error extracting content: {str(e)}"
+        return state
 
-def validation_router(state):
-    """Router for validation results"""
-    processing_status = state.get("processing_status", "UNKNOWN")
-    return "failed" if processing_status == "FAILED" else "continue"
-
-# def content_normalization_node(state):
-#     """Pass-through node"""
-#     return {**state, "original_content": state["content"]}
-
-def generate_all_content_node(state):
-    """Generate all educational content in one LLM call"""
+def validate_content_node(state: ProcessingState) -> ProcessingState:
+    """Validate extracted content"""
     try:
-        # Generate all content at once
-        all_content = generate_all_content_tool(
-            state["content"], 
-            state["standard"], 
-            state["subject"], 
-            state["chapter"]
-        )
+        state["processing_steps"].append("validate_content")
         
-        # Store the raw content directly - let the formatter handle parsing
-        generated_content = {
-            "notes": all_content,  # Store raw content
-            "blanks": all_content,  # Store raw content
-            "matches": all_content,  # Store raw content
-            "qna": all_content  # Store raw content
-        }
+        content = state.get("content")
+        standard = state.get("standard")
+        subject = state.get("subject")
+        chapter = state.get("chapter")
         
-        return {
-            **state, 
-            "generated_content": generated_content,
-            "processing_status": "CONTINUE"
-        }
+        if not all([content, standard, subject, chapter]):
+            state["error_message"] = "Missing required parameters for validation"
+            return state
+        
+        from core.validators import validate_educational_content
+        validation_results = validate_educational_content(content, standard, subject, chapter)
+        state["validation_results"] = validation_results
+        
+        return state
         
     except Exception as e:
-        return {
-            **state,
-            "processing_status": "FAILED",
-            "error_details": f"Content generation error: {str(e)}"
-        }
+        logger.error(f"Error in validate_content_node: {str(e)}")
+        state["error_message"] = f"Error validating content: {str(e)}"
+        return state
 
-def output_formatter_node(state):
-    """Format final output"""
+def generate_content_node(state: ProcessingState) -> ProcessingState:
+    """Generate educational content"""
     try:
+        state["processing_steps"].append("generate_content")
+        
+        content = state.get("content")
+        standard = state.get("standard")
+        subject = state.get("subject")
+        chapter = state.get("chapter")
+        
+        if not all([content, standard, subject, chapter]):
+            state["error_message"] = "Missing required parameters for generation"
+            return state
+        
+        # Check if validation passed
         validation_results = state.get("validation_results", {})
-        generated_content = state.get("generated_content", {})
+        if validation_results.get("overall_status") != "PASSED":
+            state["error_message"] = "Content validation failed"
+            return state
         
-        # Use the raw generated content directly
-        raw_content = generated_content.get('notes', 'Not generated')
+        from core.generators import generate_educational_content, generate_comprehensive_output
+        generated_content = generate_educational_content(content, standard, subject, chapter)
         
-        comprehensive_response = f"""
-COMPREHENSIVE VALIDATION RESULTS:
-Grade Check: {validation_results.get('grade_check', 'Not performed')}
-Safety Check: {validation_results.get('safety_check', 'Not performed')}
-Relevance Check: {validation_results.get('relevance_check', 'Not performed')}
-Overall Status: {validation_results.get('status', 'Unknown')}
-
-{raw_content}
-        """
+        # Generate comprehensive output
+        comprehensive_output = generate_comprehensive_output(validation_results, generated_content)
         
-        return {
-            **state,
-            "messages": state["messages"] + [{"role": "assistant", "content": comprehensive_response}]
-        }
+        if comprehensive_output.get("success"):
+            state["final_response"] = comprehensive_output
+        else:
+            state["error_message"] = comprehensive_output.get("error") or comprehensive_output.get("message") or "Processing failed"
+        
+        return state
         
     except Exception as e:
-        error_response = f"Output formatting failed: {str(e)}"
-        return {
-            **state,
-            "messages": state["messages"] + [{"role": "assistant", "content": error_response}]
-        }
+        logger.error(f"Error in generate_content_node: {str(e)}")
+        state["error_message"] = f"Error generating content: {str(e)}"
+        return state
 
-def build_graph():
-    """Build processing graph"""
-    graph = StateGraph(AgentState)
-    
-    # Add nodes - removed content_extraction_node as it's unnecessary
-    graph.add_node("comprehensive_validation", comprehensive_validation_node)
-    # graph.add_node("normalize_content", content_normalization_node)
-    graph.add_node("generate_all_content", generate_all_content_node)
-    graph.add_node("format_output", output_formatter_node)
-    
-    # Define flow - start directly with validation
-    graph.set_entry_point("comprehensive_validation")
 
-    graph.add_conditional_edges(
-        "comprehensive_validation",
-        validation_router,
+
+def should_continue_to_validation(state: ProcessingState) -> str:
+    """Determine if we should continue to validation"""
+    if state.get("error_message"):
+        return "error"
+    return "continue"
+
+def should_continue_to_generation(state: ProcessingState) -> str:
+    """Determine if we should continue to generation"""
+    if state.get("error_message"):
+        return "error"
+    return "continue"
+
+def create_workflow() -> StateGraph:
+    """Create the LangGraph workflow"""
+    # Create the workflow
+    workflow = StateGraph(ProcessingState)
+    
+    # Add nodes
+    workflow.add_node("extract_content", extract_content_node)
+    workflow.add_node("validate_content", validate_content_node)
+    workflow.add_node("generate_content", generate_content_node)
+    
+    # Set entry point
+    workflow.set_entry_point("extract_content")
+    
+    # Add conditional edges
+    workflow.add_conditional_edges(
+        "extract_content",
+        should_continue_to_validation,
         {
-            "continue": "generate_all_content",
-            "failed": END
+            "continue": "validate_content",
+            "error": END
         }
-    )    
-    # graph.add_conditional_edges(
-    #     "comprehensive_validation",
-    #     validation_router,
-    #     {
-    #         "continue": "normalize_content",
-    #         "failed": END
-    #     }
-    # )
+    )
     
-    # graph.add_edge("normalize_content", "generate_all_content")
-    graph.add_edge("generate_all_content", "format_output")
-    graph.add_edge("format_output", END)
+    workflow.add_conditional_edges(
+        "validate_content",
+        should_continue_to_generation,
+        {
+            "continue": "generate_content",
+            "error": END
+        }
+    )
     
-    return graph.compile()
+    workflow.add_edge("generate_content", END)
+    
+    return workflow
+
+# Create the workflow instance
+workflow = create_workflow()

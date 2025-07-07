@@ -100,6 +100,21 @@ class TikaExtractor:
 # Global Tika extractor instance
 tika_extractor = TikaExtractor()
 
+def extract_text_from_pdf(pdf_path: str) -> str:
+    """
+    Extract text from PDF using Tika (main function for imports)
+    
+    Args:
+        pdf_path: Path to the PDF file
+        
+    Returns:
+        Extracted text content or error message
+    """
+    try:
+        return tika_extractor.extract_text(pdf_path)
+    except Exception as e:
+        return f"ERROR: {str(e)}"
+
 def extract_pdf_content_tika(pdf_path: str) -> str:
     """
     Extract PDF content using Tika (convenience function)
