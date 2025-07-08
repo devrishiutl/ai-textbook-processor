@@ -2,7 +2,6 @@
 Simple Main Entry Point
 """
 import uvicorn
-from routes.route import app
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8003) 
+    uvicorn.run("routes.route:app", host="0.0.0.0", port=8003, reload=True) 

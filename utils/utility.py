@@ -13,17 +13,20 @@ from langsmith import traceable
 def read_data_from_file(pdf_path: str) -> str:
     """Read PDF using Tika server"""
     try:
+        # Read file content first
         with open(pdf_path, 'rb') as f:
-            # Use PUT method to /tika endpoint for text extraction
-            response = requests.put(
-                'http://localhost:8004/tika', 
-                data=f, 
-                headers={
-                    'Content-Type': 'application/pdf',
-                    'Accept': 'text/plain'
-                },
-                timeout=30
-            )
+            file_content = f.read()
+        
+        # Use PUT method to /tika endpoint for text extraction
+        response = requests.put(
+            'http://localhost:8004/tika', 
+            data=file_content, 
+            headers={
+                'Content-Type': 'application/pdf',
+                'Accept': 'text/plain'
+            },
+            timeout=30
+        )
         
         if response.status_code == 200:
             text = response.text
