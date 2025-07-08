@@ -8,14 +8,16 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
-    openjdk-11-jre-headless \
+    default-jre \
     curl \
     wget \
     unzip \
-    && rm -rf /var/lib/apt/lists/*
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
 # Set Java environment
-ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+ENV JAVA_HOME=/usr/lib/jvm/default-java
 ENV PATH=$PATH:$JAVA_HOME/bin
 
 # Create app directory
@@ -29,7 +31,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
 # Download and setup Apache Tika
-RUN wget https://archive.apache.org/dist/tika/tika-server-2.8.0.jar -O /app/tika-server.jar
+RUN wget https://dlcdn.apache.org/tika/3.2.0/tika-server-standard-3.2.0.jar -O /app/tika-server.jar
 
 # Copy application code
 COPY . .
