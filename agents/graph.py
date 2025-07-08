@@ -38,7 +38,7 @@ def create_graph():
     # Add conditional edges
     workflow.add_conditional_edges(
         "validate_content",
-        route_after_validation
+        route_after_validation,["generate_content",END]
     )
     
     # Add final edge

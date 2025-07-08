@@ -96,10 +96,10 @@ def preprocess_image(image_path: str, target_size=(800, 800), quality=85) -> str
 
 @traceable(name="image_vision_processing")
 def vision_understand_tool(images, standard, subject, chapter):
-    """Process images with vision AI"""
+    """Process images with vision AI - Single call approach for speed"""
     try:
-        # Fixed prompt: Extract ACTUAL content from images, not generate based on subject/chapter
-        user_content = [{"type": "text", "text": "Extract all educational content from these images. Describe exactly what you see - text, diagrams, concepts, topics, etc. Do not generate new content, only describe what is actually present in the images."}]
+        # Strict extraction prompt - only what is actually visible in images
+        user_content = [{"type": "text", "text": "Extract ONLY the actual text and content that is visible in these images. Do not interpret, explain, or generate any content. Simply transcribe what you can read and see. Include: text, numbers, equations, table data, headings, captions - but only if they are actually present in the images. If you cannot clearly read something, do not guess or fill in gaps."}]
         
         for img_path in images:
             # Preprocess image before encoding
@@ -120,11 +120,11 @@ def vision_understand_tool(images, standard, subject, chapter):
         response = azure_client.chat.completions.create(
             model=AZURE_DEPLOYMENT_NAME,
             messages=[
-                {"role": "system", "content": "You are an educational content extractor. Extract and describe only the actual content present in the images."},
+                {"role": "system", "content": "You are a text transcription tool. Your job is to extract and transcribe ONLY the actual text and content visible in the images. Do not interpret, explain, or add any generated content. Simply transcribe what you can clearly see and read."},
                 {"role": "user", "content": user_content}
             ],
             temperature=0.1,
-            max_tokens=3000
+            max_tokens=3000  # Increased from 3000 to allow more comprehensive extraction
         )
         
         return response.choices[0].message.content
