@@ -1,13 +1,30 @@
-openai
-langchain
-langchain-core
-langgraph
-langsmith
-python-dotenv
-pillow
-docling
-fastapi
-uvicorn
-python-multipart
-reportlab
-requests
+# Core dependencies
+fastapi==0.104.1
+uvicorn==0.24.0
+python-multipart==0.0.6
+
+# Azure OpenAI
+openai>=1.10.0
+
+# LangChain and LangSmith
+langchain-openai>=0.0.5
+langgraph==0.4.8
+
+# Image processing
+Pillow==10.1.0
+
+# PDF processing
+tika==2.6.0
+PyPDF2==3.0.1
+
+# Utilities
+python-dotenv==1.0.0
+requests==2.31.0
+
+# Development
+pytest==7.4.3
+black==23.11.0
+flake8==6.1.0
+
+# OCR
+requests==2.31.0
