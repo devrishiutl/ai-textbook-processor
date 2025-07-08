@@ -5,6 +5,7 @@ import os
 from langchain_openai import AzureChatOpenAI
 from openai import AzureOpenAI
 from dotenv import load_dotenv
+from langsmith.wrappers import wrap_openai
 
 load_dotenv()
 
@@ -47,11 +48,11 @@ class Config:
     def azure_client(self):
         """Get Azure client (lazy init)"""
         if self._azure_client is None:
-            self._azure_client = AzureOpenAI(
+            self._azure_client = wrap_openai(AzureOpenAI(
                 azure_endpoint=self.AZURE_ENDPOINT,
                 api_key=self.AZURE_API_KEY,
                 api_version=self.AZURE_API_VERSION
-            )
+            ))
         return self._azure_client
     
     def get_validation_llm(self):

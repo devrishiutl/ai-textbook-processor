@@ -1,109 +1,143 @@
-# Simple Educational Content Processor
+# AI Textbook Processor
 
-A clean, simple AI-powered educational content processing system.
+An AI-powered system that extracts text from PDFs and images, then generates educational content like study notes, fill-in-the-blanks, and Q&A sections.
 
-## 📁 File Structure
+## Features
 
-```
-ai-textbook-processor/
-├── main.py                    # uvicorn api start
-├── agents/
-│   ├── graph.py              # contains functions which returns graph
-│   ├── nodes.py              # contains all graph nodes and tools for graph
-│   └── helper.py             # contains all agent specific non tool function
-├── routes/
-│   └── route.py              # contains all api routes
-├── utils/
-│   └── utility.py            # contains all non intelligent functions
-├── logs/                     # contains logs
-├── config/
-│   └── configuration.py      # singleton design pattern, config variables, LLM connections
-└── requirements.txt
-```
+- 📄 **PDF Processing**: Extract text using Apache Tika
+- 🖼️ **Image Processing**: Extract text using Azure Vision AI
+- ✅ **Content Validation**: Check appropriateness and relevance
+- 📚 **Educational Content**: Generate study materials
+- 🔍 **Token Tracking**: Monitor API usage and costs
+- 🐳 **Docker Support**: Easy deployment
 
-## 🚀 Quick Start
+## Getting Started
 
-### 1. Setup Environment
+### Step 1: Setup Environment
 ```bash
+# Install dependencies
 pip install -r requirements.txt
+
+# Create .env file with your Azure OpenAI credentials
+echo "AZURE_ENDPOINT=https://your-resource.openai.azure.com/
+AZURE_API_KEY=your-azure-openai-api-key
+AZURE_DEPLOYMENT_NAME=model-name" > .env
 ```
 
-### 2. Configure Environment
-Create `.env` file:
-```env
-AZURE_ENDPOINT=https://your-resource.openai.azure.com/
-AZURE_API_KEY=your-api-key
-AZURE_DEPLOYMENT_NAME=gpt-4
-```
-
-### 3. Run Application
+### Step 2: Start Services
 ```bash
+# Option A: Local setup
+# Download and start Tika server (in separate terminal)
+wget https://dlcdn.apache.org/tika/3.2.0/tika-server-standard-3.2.0.jar
+java -jar tika-server-standard-3.2.0.jar --host 0.0.0.0 --port 8004
+
+# Start application
 python main.py
+
+# Option B: Docker setup (recommended)
+docker-compose up --build
 ```
 
-## 🔄 Simple Flow
+### Step 3: Access API
+- **API Docs**: http://localhost:8003/docs
 
-1. **Get files/data** → Upload PDF or images with standard, subject, chapter
-2. **Extract content** → `read_data_from_file()` or `read_data_from_image()`
-3. **Invoke graph** → 2 nodes: validate_content → generate_content
-4. **Return response** → JSON with generated educational content
+## API Usage
 
-## 📋 API Usage
-
-### Process Content
+### Process PDF
 ```bash
-curl -X POST "http://localhost:8000/process" \
-  -F "standard=10th" \
-  -F "subject=Mathematics" \
-  -F "chapter=Algebra" \
+curl -X POST "http://localhost:8003/api/process-json" \
+  -F "standard=Class 12" \
+  -F "subject=Physics" \
+  -F "chapter=Semiconductor" \
+  -F "content_type=pdf" \
   -F "pdf_file=@document.pdf"
 ```
 
-### Response Format
+### Process Images
+```bash
+curl -X POST "http://localhost:8003/api/process-json" \
+  -F "standard=Class 12" \
+  -F "subject=Physics" \
+  -F "chapter=Semiconductor" \
+  -F "content_type=images" \
+  -F "files=@image1.png" \
+  -F "files=@image2.png"
+```
+
+## Response Format
+
 ```json
 {
   "success": true,
-  "content": "Generated educational content...",
-  "metadata": {
-    "standard": "10th",
-    "subject": "Mathematics", 
-    "chapter": "Algebra"
+  "content": {
+    "importantNotes": "# Study Notes\n\nComprehensive notes...",
+    "fillInTheBlanks": {
+      "questions": {"1": "Question 1", "2": "Question 2"},
+      "answers": {"1": "answer1", "2": "answer2"}
+    },
+    "matchTheFollowing": {
+      "column_a": {"1": "Term 1", "2": "Term 2"},
+      "column_b": {"A": "Definition A", "B": "Definition B"},
+      "answers": {"1": "A", "2": "B"}
+    },
+    "questionAnswer": {
+      "questions": {"Q1": "Question 1?", "Q2": "Question 2?"},
+      "answers": {"Q1": "Answer 1", "Q2": "Answer 2"}
+    }
+  },
+  "validation_result": {
+    "grade_check": "APPROPRIATE",
+    "safety_check": "APPROPRIATE",
+    "relevance_check": "MATCH"
   }
 }
 ```
 
-## 🏗️ Architecture
+## Configuration
 
-### **2 Simple Nodes:**
-- **validate_content**: Check content validity
-- **generate_content**: Create educational materials
+### Environment Variables
+| Variable | Description |
+|----------|-------------|
+| `AZURE_ENDPOINT` | Azure OpenAI endpoint URL |
+| `AZURE_API_KEY` | Azure OpenAI API key |
+| `AZURE_DEPLOYMENT_NAME` | Model deployment name |
 
-### **Simple Functions:**
-- `read_data_from_file(pdf)` → string
-- `read_data_from_image(list[image])` → string
+### Optional
+| Variable | Description |
+|----------|-------------|
+| `LANGSMITH_API_KEY` | LangSmith API key |
+| `LANGSMITH_PROJECT` | LangSmith project name |
 
-### **Clean Flow:**
-1. Extract content from files
-2. Validate content
-3. Generate educational content
-4. Return response
+## Access Points
 
-## ✅ Features
+- **API Documentation**: http://localhost:8003/docs
+- **API Endpoint**: http://localhost:8003/api/process-json
+- **Health Check**: http://localhost:8003/docs
 
-- ✅ **Simple & Clean**: Minimal code, clear structure
-- ✅ **Single Source**: PDF OR Images (no mixing)
-- ✅ **2 Nodes Only**: validate_content → generate_content
-- ✅ **Fast Processing**: Direct file reading
-- ✅ **Error Handling**: Simple error responses
-- ✅ **Singleton Config**: Efficient LLM management
+## Token Tracking
 
-## 🔧 Configuration
+The application logs token usage for cost monitoring:
+```
+Vision processing tokens - Input: 433653, Output: 1324, Total: 434977
+Total tokens generated for 17 images: 434977
+```
 
-The `config/configuration.py` uses singleton pattern to:
-- Load environment variables
-- Initialize LLM connections once
-- Manage configuration globally
+## Project Structure
 
-## 📊 Logging
+```
+ai-textbook-processor/
+├── main.py                    # FastAPI application
+├── agents/                    # LangGraph workflow
+├── routes/                    # API routes
+├── utils/                     # File processing
+├── config/                    # Configuration
+├── logs/                      # Application logs
+├── docker-compose.yml         # Docker setup
+└── requirements.txt           # Dependencies
+```
 
-Logs are stored in the `logs/` directory for monitoring and debugging.
+## Support
+
+- Check logs in `logs/` directory
+- Review API docs at `http://localhost:8003/docs`
+- Monitor LangSmith traces for debugging
