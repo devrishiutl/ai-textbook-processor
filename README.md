@@ -19,9 +19,20 @@ An AI-powered system that extracts text from PDFs and images, then generates edu
 pip install -r requirements.txt
 
 # Create .env file with your Azure OpenAI credentials
-echo "AZURE_ENDPOINT=https://your-resource.openai.azure.com/
-AZURE_API_KEY=your-azure-openai-api-key
-AZURE_DEPLOYMENT_NAME=model-name" > .env
+ 
+      # Add your Azure OpenAI environment variables here or in .env file
+      # AZURE_OPENAI_API_KEY=your_api_key
+      # AZURE_OPENAI_ENDPOINT=your_endpoint
+      # AZURE_DEPLOYMENT_NAME=your_deployment_name
+      # LANGSMITH_API_KEY=your_langsmith_key
+      # LANGSMITH_PROJECT=your_project_name
+
+      # AZURE_OPENAI_API_KEY=
+      # AZURE_OPENAI_API_BASE=
+      # AZURE_OPENAI_API_VERSION=
+      # AZURE_OPENAI_DEPLOYMENT_NAME=
+      # LANG_SMITH_KEY=
+      # LANGSMITH_API_KEY=
 ```
 
 ### Step 2: Start Services
