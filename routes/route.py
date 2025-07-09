@@ -2,6 +2,7 @@
 Simple API Routes
 """
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from typing import List, Optional
 import tempfile
@@ -12,6 +13,15 @@ from agents.graph import graph
 from agents.helper import extract_content_from_files, create_initial_state, format_response
 
 app = FastAPI()
+
+# Enable CORS from all origins
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.post("/api/process-json")
 async def process_content_json(
