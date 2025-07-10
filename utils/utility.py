@@ -10,39 +10,39 @@ import io
 from config.configuration import get_generation_llm, azure_client, AZURE_DEPLOYMENT_NAME
 from langsmith import traceable
 
-def read_data_from_file(pdf_path: str) -> str:
-    """Read PDF using Tika server"""
-    try:
-        # Read file content first
-        with open(pdf_path, 'rb') as f:
-            file_content = f.read()
+# def read_data_from_file(pdf_path: str) -> str:
+#     """Read PDF using Tika server"""
+#     try:
+#         # Read file content first
+#         with open(pdf_path, 'rb') as f:
+#             file_content = f.read()
         
-        # Use PUT method to /tika endpoint for text extraction
-        response = requests.put(
-            'http://localhost:8004/tika', 
-            data=file_content, 
-            headers={
-                'Content-Type': 'application/pdf',
-                'Accept': 'text/plain'
-            },
-            timeout=30
-        )
+#         # Use PUT method to /tika endpoint for text extraction
+#         response = requests.put(
+#             'http://localhost:8004/tika', 
+#             data=file_content, 
+#             headers={
+#                 'Content-Type': 'application/pdf',
+#                 'Accept': 'text/plain'
+#             },
+#             timeout=30
+#         )
         
-        if response.status_code == 200:
-            text = response.text
-            # Check if we got meaningful content
-            if len(text.strip()) < 100:
-                return "ERROR: PDF extraction returned insufficient content. Please ensure the PDF contains actual educational text."
-            return text[:50000] + "... [truncated]" if len(text) > 50000 else text
-        else:
-            return f"ERROR: Tika server returned status {response.status_code}. Response: {response.text}"
+#         if response.status_code == 200:
+#             text = response.text
+#             # Check if we got meaningful content
+#             if len(text.strip()) < 100:
+#                 return "ERROR: PDF extraction returned insufficient content. Please ensure the PDF contains actual educational text."
+#             return text[:50000] + "... [truncated]" if len(text) > 50000 else text
+#         else:
+#             return f"ERROR: Tika server returned status {response.status_code}. Response: {response.text}"
             
-    except requests.exceptions.ConnectionError:
-        return "ERROR: Cannot connect to Tika server. Please ensure Tika server is running on localhost:8004"
-    except requests.exceptions.Timeout:
-        return "ERROR: Tika server request timed out"
-    except Exception as e:
-        return f"ERROR: PDF extraction failed - {str(e)}"
+#     except requests.exceptions.ConnectionError:
+#         return "ERROR: Cannot connect to Tika server. Please ensure Tika server is running on localhost:8004"
+#     except requests.exceptions.Timeout:
+#         return "ERROR: Tika server request timed out"
+#     except Exception as e:
+#         return f"ERROR: PDF extraction failed - {str(e)}"
 
 def preprocess_image(image_path: str, target_size=(800, 800), quality=85) -> str:
     """
