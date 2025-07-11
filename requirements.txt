@@ -28,3 +28,4 @@ flake8==6.1.0
 
 # OCR
 requests==2.31.0
+unidecode==1.3.7

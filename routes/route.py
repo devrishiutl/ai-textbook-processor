@@ -1,7 +1,7 @@
 """
 Simple API Routes
 """
-from agents.helper import clean_ocr_math_text, extract_content_from_files, create_initial_state, format_response
+from agents.helper import extract_content_from_files, create_initial_state, format_response, clean_for_llm_prompt
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -12,6 +12,10 @@ import json
 import asyncio
 from agents.graph import graph
 from pdf2image import convert_from_path
+
+# Initialize logging
+from config.logging import setup_logging
+logger = setup_logging()
 
 app = FastAPI()
 
@@ -80,13 +84,15 @@ async def process_content_json(
         else:
             raise HTTPException(400, "Invalid content_type")
 
-        content = clean_ocr_math_text(content)
-        print(content)
+        content = clean_for_llm_prompt(content)
         state = create_initial_state(standard, subject, chapter, content)
         result = graph.invoke(state)
         return format_response(result)
 
     except Exception as e:
+        import traceback
+        error_details = f"Processing error: {str(e)}\nFull traceback:\n{traceback.format_exc()}"
+        logger.error(error_details)
         raise HTTPException(500, f"Processing error: {str(e)}")
 
 @app.post("/api/process-stream")
@@ -150,7 +156,7 @@ async def process_content_stream(
         else:
             raise HTTPException(400, "Invalid content_type")
 
-        content = clean_ocr_math_text(content)
+        content = clean_for_llm_prompt(content)
         state = create_initial_state(standard, subject, chapter, content)
         result = graph.invoke(state)
         final_response = format_response(result)
@@ -188,6 +194,9 @@ async def process_content_stream(
         )
 
     except Exception as e:
+        import traceback
+        error_details = f"Streaming processing error: {str(e)}\nFull traceback:\n{traceback.format_exc()}"
+        logger.error(error_details)
         return StreamingResponse(
             iter([f"data: {json.dumps({'step': 'error', 'status': 'error', 'message': f'Processing error: {str(e)}', 'progress': 100, 'error': True})}\n\n"]),
             media_type="text/plain",

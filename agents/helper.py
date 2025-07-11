@@ -7,7 +7,7 @@ from pdf2image import convert_from_path
 
 from cleantext import clean
 
-def clean_ocr_math_text(raw_text):
+def clean_for_llm_prompt(raw_text):
     cleaned = clean(raw_text, no_line_breaks=True, replace_with_punct=" ")
     cleaned = cleaned.replace("\\", "\\\\")  # Escape raw backslashes
     return cleaned
@@ -43,20 +43,44 @@ def create_initial_state(standard: str, subject: str, chapter: str, content: str
         "validation_result": None
     }
 
+# def format_response(state: Dict[str, Any]) -> Dict[str, Any]:
+#     """Format response"""
+#     if state.get("error"):
+#         return {
+#             "success": False, 
+#             "error": state["error"]
+#         }
+#     return {
+#         "success": True,
+#         "content": state.get("generated_content", ""),
+#         "validation_result": state.get("validation_result"),
+#         "metadata": {
+#             "standard": state.get("standard"),
+#             "subject": state.get("subject"),
+#             "chapter": state.get("chapter")
+#         }
+#     } 
+
 def format_response(state: Dict[str, Any]) -> Dict[str, Any]:
     """Format response"""
     if state.get("error"):
         return {
-            "success": False, 
+            "success": False,
             "error": state["error"]
         }
+    
+    # Escape backslashes in generated content
+    result = state.get("generated_content", "")
+    if isinstance(result, str):
+        result = result.replace("\\", "\\\\")
+    
     return {
         "success": True,
-        "content": state.get("generated_content", ""),
+        "content": result,
         "validation_result": state.get("validation_result"),
         "metadata": {
             "standard": state.get("standard"),
             "subject": state.get("subject"),
             "chapter": state.get("chapter")
         }
-    } 
+    }
