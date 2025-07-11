@@ -1,6 +1,7 @@
 """
 Simple API Routes
 """
+from utils.chroma_utility import store_textbook_transcript, get_textbook_transcript
 from agents.helper import extract_content_from_files, create_initial_state, format_response, clean_for_llm_prompt, get_youtube_transcript
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -226,3 +227,110 @@ async def process_content_stream(
                 "Content-Type": "text/event-stream"
             }
         )
+    
+
+
+
+
+
+
+@app.post("/api/upload-content")
+async def upload_content(
+    standard: str = Form(...),
+    subject: str = Form(...),
+    chapter: str = Form(...),
+    content_type: str = Form(...),
+    files: Optional[List[UploadFile]] = File([]),
+    content_or_url: Optional[str] = Form(None)
+):
+    try:
+        if content_type == "text":
+            if not content_or_url:
+                raise HTTPException(400, "text_content required")
+            content = content_or_url
+
+        elif content_type == "web_url":
+            if not content_or_url:
+                raise HTTPException(400, "web_url required")
+            content = get_weburl_content(content_or_url)
+
+        elif content_type == "youtube_url":
+            if not content_or_url:
+                raise HTTPException(400, "youtube_url required")
+            content = get_youtube_transcript(content_or_url)
+
+        elif content_type == "pdf":
+            if len(files) != 1 or not files[0].filename.lower().endswith(".pdf"):
+                raise HTTPException(400, "Exactly one PDF file is required")
+
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_pdf:
+                temp_pdf.write(await files[0].read())
+                temp_pdf.flush()
+
+            try:
+                pil_images = convert_from_path(temp_pdf.name)
+            finally:
+                os.unlink(temp_pdf.name)
+
+            image_paths = []
+            for img in pil_images:
+                temp_img = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")
+                img.save(temp_img.name, "JPEG")
+                image_paths.append(temp_img.name)
+
+            content = extract_content_from_files(None, image_paths)
+            for path in image_paths:
+                os.unlink(path)
+
+            if content.startswith("ERROR"):
+                raise HTTPException(400, f"PDF processing failed: {content}")
+
+        elif content_type == "images":
+            if not files:
+                raise HTTPException(400, "files required")
+            image_paths = []
+            for file in files:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as f:
+                    f.write(await file.read())
+                    image_paths.append(f.name)
+            content = extract_content_from_files(None, image_paths)
+            for path in image_paths:
+                os.unlink(path)
+
+        else:
+            raise HTTPException(400, "Invalid content_type")
+
+        content = clean_for_llm_prompt(content)
+        ids = store_textbook_transcript(standard, subject, chapter, content, content_type)
+        return ids
+
+    except Exception as e:
+        import traceback
+        error_details = f"Processing error: {str(e)}\nFull traceback:\n{traceback.format_exc()}"
+        logger.error(error_details)
+        raise HTTPException(500, f"Processing error: {str(e)}")
+
+
+
+
+@app.post("/api/get-content")
+async def get_content(
+    standard: str = Form(...),
+    subject: str = Form(...),
+    chapter: str = Form(...),
+    ids: str = Form(...)
+):
+    try:
+        content = get_textbook_transcript(ids)
+        if content is None:
+            raise HTTPException(404, f"Content not found with ID: {ids}")
+        
+        state = create_initial_state(standard, subject, chapter, content)
+        result = graph.invoke(state)
+        return format_response(result)
+
+    except Exception as e:
+        import traceback
+        error_details = f"Processing error: {str(e)}\nFull traceback:\n{traceback.format_exc()}"
+        logger.error(error_details)
+        raise HTTPException(500, f"Processing error: {str(e)}")

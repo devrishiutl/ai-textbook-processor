@@ -22,7 +22,6 @@ def get_youtube_transcript(video_url):
     try:
         transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=['en', 'hi'])
         text = ' '.join([item['text'] for item in transcript_list])
-        print(1)
         return text
     except:
 
@@ -34,8 +33,6 @@ def get_youtube_transcript(video_url):
         # Transcribe using Whisper
         model = whisper.load_model("base")
         result = model.transcribe(audio_path)
-        print(2)
-
         return result['text']
 
 

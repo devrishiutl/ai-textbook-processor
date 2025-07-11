@@ -1,5 +1,6 @@
 # Byte-compiled / cache files
 __pycache__/
+chroma_db/
 *.py[cod]
 *.so
 *.pyd
