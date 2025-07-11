@@ -1,7 +1,7 @@
 """
 Simple API Routes
 """
-from agents.helper import extract_content_from_files, create_initial_state, format_response, clean_for_llm_prompt
+from agents.helper import extract_content_from_files, create_initial_state, format_response, clean_for_llm_prompt, get_youtube_transcript
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -12,9 +12,9 @@ import json
 import asyncio
 from agents.graph import graph
 from pdf2image import convert_from_path
-
 # Initialize logging
 from config.logging import setup_logging
+from config.configuration import get_weburl_content
 logger = setup_logging()
 
 app = FastAPI()
@@ -34,14 +34,24 @@ async def process_content_json(
     subject: str = Form(...),
     chapter: str = Form(...),
     content_type: str = Form(...),
-    files: List[UploadFile] = File([]),
-    text_content: Optional[str] = Form(None)
+    files: Optional[List[UploadFile]] = File([]),
+    content_or_url: Optional[str] = Form(None)
 ):
     try:
         if content_type == "text":
-            if not text_content:
+            if not content_or_url:
                 raise HTTPException(400, "text_content required")
-            content = text_content
+            content = content_or_url
+
+        elif content_type == "web_url":
+            if not content_or_url:
+                raise HTTPException(400, "web_url required")
+            content = get_weburl_content(content_or_url)
+
+        elif content_type == "youtube_url":
+            if not content_or_url:
+                raise HTTPException(400, "youtube_url required")
+            content = get_youtube_transcript(content_or_url)
 
         elif content_type == "pdf":
             if len(files) != 1 or not files[0].filename.lower().endswith(".pdf"):
@@ -101,16 +111,26 @@ async def process_content_stream(
     subject: str = Form(...),
     chapter: str = Form(...),
     content_type: str = Form(...),
-    files: List[UploadFile] = File([]),
-    text_content: Optional[str] = Form(None)
+    files: Optional[List[UploadFile]] = File([]),
+    content_or_url: Optional[str] = Form(None)
 ):
     """Process content and return streaming response with 8 required steps"""
     try:
         content = None
         if content_type == "text":
-            if not text_content:
+            if not content_or_url:
                 raise HTTPException(400, "text_content required")
-            content = text_content
+            content = content_or_url
+
+        elif content_type == "web_url":
+            if not content_or_url:
+                raise HTTPException(400, "web_url required")
+            content = get_weburl_content(content_or_url)
+
+        elif content_type == "youtube_url":
+            if not content_or_url:
+                raise HTTPException(400, "youtube_url required")
+            content = get_youtube_transcript(content_or_url)
 
         elif content_type == "pdf":
             if len(files) != 1 or not files[0].filename.lower().endswith(".pdf"):

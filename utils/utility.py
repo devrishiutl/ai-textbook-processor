@@ -7,7 +7,7 @@ import requests
 from typing import List
 from PIL import Image
 import io
-from config.configuration import get_generation_llm, azure_client, AZURE_DEPLOYMENT_NAME
+from config.configuration import get_generation_llm, llm_client, LLL_MODEL
 from langsmith import traceable
 
 # def read_data_from_file(pdf_path: str) -> str:
@@ -117,8 +117,8 @@ def vision_understand_tool(images, standard, subject, chapter):
                 "image_url": {"url": f"data:image/jpeg;base64,{encoded}"}
             })
 
-        response = azure_client.chat.completions.create(
-            model=AZURE_DEPLOYMENT_NAME,
+        response = llm_client.chat.completions.create(
+            model=LLL_MODEL,
             messages=[
                 {"role": "system", "content": "You are a text transcription tool. Your job is to extract and transcribe ONLY the actual text and content visible in the images. Do not interpret, explain, or add any generated content. Simply transcribe what you can clearly see and read."},
                 {"role": "user", "content": user_content}

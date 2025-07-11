@@ -6,7 +6,8 @@ from langchain_openai import AzureChatOpenAI
 from openai import AzureOpenAI
 from dotenv import load_dotenv
 from langsmith.wrappers import wrap_openai
-
+import requests
+import json
 load_dotenv()
 
 class Config:
@@ -31,6 +32,9 @@ class Config:
         self.AZURE_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
         self.AZURE_DEPLOYMENT_NAME = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
         self.AZURE_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION", "2024-02-15-preview")
+
+        # Serper API Key
+        self.SERPER_API_KEY = os.getenv("SERPER_API_KEY")
         
         # Setup LangSmith
         if self.LANGSMITH_API_KEY:
@@ -80,6 +84,20 @@ class Config:
                 max_tokens=4000
             )
         return self._generation_llm
+    
+    def get_weburl_content(self, web_url):
+            url = "https://scrape.serper.dev"
+
+            payload = json.dumps({
+            "url": web_url
+            })
+            headers = {
+            'X-API-KEY': self.SERPER_API_KEY,
+            'Content-Type': 'application/json'
+            }
+            response = requests.request("POST", url, headers=headers, data=payload)
+            return response.text
+    
 
 # Global instance
 config = Config()
@@ -91,6 +109,9 @@ def get_validation_llm():
 def get_generation_llm():
     return config.get_generation_llm()
 
+def get_weburl_content(web_url):
+    return config.get_weburl_content(web_url)
+
 # Legacy aliases
-azure_client = config.azure_client
-AZURE_DEPLOYMENT_NAME = config.AZURE_DEPLOYMENT_NAME 
+llm_client = config.azure_client
+LLL_MODEL = config.AZURE_DEPLOYMENT_NAME 

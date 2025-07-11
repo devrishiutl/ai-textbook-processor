@@ -16,6 +16,9 @@ AZURE_DEPLOYMENT_NAME = config.AZURE_DEPLOYMENT_NAME
 AZURE_API_VERSION = config.AZURE_API_VERSION
 azure_client = config.azure_client
 
+# Serper API Key
+SERPER_API_KEY = config.SERPER_API_KEY
+
 # Application Settings
 MAX_FILE_SIZE_PDF = 100 * 1024 * 1024  # 100MB
 MAX_FILE_SIZE_IMAGE = 50 * 1024 * 1024  # 50MB

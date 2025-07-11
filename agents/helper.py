@@ -4,13 +4,40 @@ Simple Agent Helper Functions
 from typing import Dict, Any, List, Union
 from utils.utility import read_data_from_image #,read_data_from_file
 from pdf2image import convert_from_path
-
+from youtube_transcript_api import YouTubeTranscriptApi
+from pytube import YouTube
+import whisper
 from cleantext import clean
 
 def clean_for_llm_prompt(raw_text):
     cleaned = clean(raw_text, no_line_breaks=True, replace_with_punct=" ")
     cleaned = cleaned.replace("\\", "\\\\")  # Escape raw backslashes
     return cleaned
+
+
+def get_youtube_transcript(video_url):
+    video_id = video_url.split("v=")[-1]
+
+    # Try to get transcript directly
+    try:
+        transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=['en', 'hi'])
+        text = ' '.join([item['text'] for item in transcript_list])
+        print(1)
+        return text
+    except:
+
+        # Download audio
+        yt = YouTube(video_url)
+        audio_stream = yt.streams.filter(only_audio=True).first()
+        audio_path = audio_stream.download(filename='audio.mp4')
+
+        # Transcribe using Whisper
+        model = whisper.load_model("base")
+        result = model.transcribe(audio_path)
+        print(2)
+
+        return result['text']
+
 
 def extract_content_from_files(pdf_path: str = None, image_paths: List[str] = None) -> str:
     """Extract content from files"""

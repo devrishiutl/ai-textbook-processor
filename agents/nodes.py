@@ -37,7 +37,7 @@ Return valid JSON with this structure:
         llm = get_validation_llm()
         response = llm.invoke(prompt)
         result = response.content
-        print(1)
+        
         # Log token usage for cost tracking
         if hasattr(response, 'usage'):
             usage = response.usage
@@ -188,15 +188,14 @@ Return valid JSON **only**, wrapped inside a Markdown JSON code block like this:
 
     try:
         llm = get_generation_llm()
-        print(2)
         response = llm.invoke(prompt)
         result = response.content
-        print(3)
+        
         # Log token usage for cost tracking
         if hasattr(response, 'usage'):
             usage = response.usage
             logger.info(f"Generation tokens - Input: {usage.prompt_tokens}, Output: {usage.completion_tokens}, Total: {usage.total_tokens}")
-        print(4)
+        
         # Extract JSON
         start = result.find('{')
         end = result.rfind('}')
@@ -212,16 +211,13 @@ Return valid JSON **only**, wrapped inside a Markdown JSON code block like this:
             state["generated_content"] = generated_json
             state["success"] = True
             logger.info("Content generation completed successfully")
-            print(6)
         else:
             state["error"] = "Failed to generate valid JSON"
             logger.error("Failed to generate valid JSON")
-            print(7)
     except Exception as e:
         import traceback
         error_details = f"Generation error: {str(e)}\nFull traceback:\n{traceback.format_exc()}"
         state["error"] = f"Generation error: {str(e)}"
         logger.error(error_details)
         logger.error(f"Prompt that caused error: {prompt[:500]}...")  # Log first 500 chars of prompt
-        print(8)
     return state 
