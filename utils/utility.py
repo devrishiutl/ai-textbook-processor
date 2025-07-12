@@ -1,145 +1,199 @@
 """
-Simple Utility Functions
+Image Processing and Vision AI Utilities
+Follows SOLID principles with proper separation of concerns
 """
 import os
 import base64
 import requests
-from typing import List
+from typing import List, Tuple, Optional, Union
+from dataclasses import dataclass
 from PIL import Image
 import io
-from config.configuration import get_generation_llm, llm_client, LLM_MODEL
+from config.configuration import get_llm_client, get_model_name
+from config.settings import (
+    IMAGE_TARGET_SIZE, IMAGE_QUALITY, IMAGE_MAX_TOKENS, IMAGE_TEMPERATURE,
+    VISION_SYSTEM_PROMPT, VISION_USER_PROMPT
+)
 from langsmith import traceable
 
-# def read_data_from_file(pdf_path: str) -> str:
-#     """Read PDF using Tika server"""
-#     try:
-#         # Read file content first
-#         with open(pdf_path, 'rb') as f:
-#             file_content = f.read()
-        
-#         # Use PUT method to /tika endpoint for text extraction
-#         response = requests.put(
-#             'http://localhost:8004/tika', 
-#             data=file_content, 
-#             headers={
-#                 'Content-Type': 'application/pdf',
-#                 'Accept': 'text/plain'
-#             },
-#             timeout=30
-#         )
-        
-#         if response.status_code == 200:
-#             text = response.text
-#             # Check if we got meaningful content
-#             if len(text.strip()) < 100:
-#                 return "ERROR: PDF extraction returned insufficient content. Please ensure the PDF contains actual educational text."
-#             return text[:50000] + "... [truncated]" if len(text) > 50000 else text
-#         else:
-#             return f"ERROR: Tika server returned status {response.status_code}. Response: {response.text}"
-            
-#     except requests.exceptions.ConnectionError:
-#         return "ERROR: Cannot connect to Tika server. Please ensure Tika server is running on localhost:8004"
-#     except requests.exceptions.Timeout:
-#         return "ERROR: Tika server request timed out"
-#     except Exception as e:
-#         return f"ERROR: PDF extraction failed - {str(e)}"
 
-def preprocess_image(image_path: str, target_size=(800, 800), quality=85) -> str:
-    """
-    Preprocess image before sending to LLM:
-    1. Resize while maintaining aspect ratio
-    2. Optimize quality
-    3. Convert to base64
+@dataclass
+class ImageProcessingConfig:
+    """Configuration for image processing"""
+    target_size: Tuple[int, int] = IMAGE_TARGET_SIZE
+    quality: int = IMAGE_QUALITY
+    max_tokens: int = IMAGE_MAX_TOKENS
+    temperature: float = IMAGE_TEMPERATURE
+
+
+class ImagePreprocessor:
+    """Handles image preprocessing operations"""
     
-    Args:
-        image_path: Path to image file
-        target_size: Maximum dimensions (width, height)
-        quality: JPEG quality (0-100)
+    def __init__(self, config: ImageProcessingConfig):
+        self.config = config
     
-    Returns:
-        Base64 encoded optimized image or error message
-    """
-    try:
-        # Open image with PIL
-        img = Image.open(image_path)
-        
-        # Calculate aspect ratio preserving resize dimensions
+    def resize_image(self, img: Image.Image) -> Image.Image:
+        """Resize image while maintaining aspect ratio"""
         aspect_ratio = img.width / img.height
+        
         if aspect_ratio > 1:
             # Width is larger
-            new_width = min(img.width, target_size[0])
+            new_width = min(img.width, self.config.target_size[0])
             new_height = int(new_width / aspect_ratio)
         else:
             # Height is larger
-            new_height = min(img.height, target_size[1])
+            new_height = min(img.height, self.config.target_size[1])
             new_width = int(new_height * aspect_ratio)
-            
-        # Resize image
-        img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
         
-        # Convert to RGB if necessary
+        return img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+    
+    def convert_to_rgb(self, img: Image.Image) -> Image.Image:
+        """Convert image to RGB format"""
         if img.mode in ('RGBA', 'LA'):
             background = Image.new('RGB', img.size, (255, 255, 255))
             background.paste(img, mask=img.split()[-1])
-            img = background
+            return background
         elif img.mode != 'RGB':
-            img = img.convert('RGB')
-            
-        # Save to bytes with quality optimization
+            return img.convert('RGB')
+        return img
+    
+    def encode_to_base64(self, img: Image.Image) -> str:
+        """Encode image to base64 string"""
         buffer = io.BytesIO()
-        img.save(buffer, format='JPEG', quality=quality, optimize=True)
-        encoded = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        img.save(buffer, format='JPEG', quality=self.config.quality, optimize=True)
+        return base64.b64encode(buffer.getvalue()).decode('utf-8')
+    
+    def preprocess_image(self, image_path: str) -> Union[str, str]:
+        """
+        Preprocess image for LLM processing
         
-        return encoded
-    except Exception as e:
-        return f"ERROR: Image preprocessing failed - {str(e)}"
+        Args:
+            image_path: Path to image file
+            
+        Returns:
+            Base64 encoded image or error message
+        """
+        try:
+            img = Image.open(image_path)
+            img = self.resize_image(img)
+            img = self.convert_to_rgb(img)
+            return self.encode_to_base64(img)
+        except Exception as e:
+            return f"ERROR: Image preprocessing failed - {str(e)}"
 
-@traceable(name="image_vision_processing")
-def vision_understand_tool(images, standard, subject, chapter):
-    """Process images with vision AI - Single call approach for speed"""
-    try:
-        # Strict extraction prompt - only what is actually visible in images
-        user_content = [{"type": "text", "text": "Extract ONLY the actual text and content that is visible in these images. Do not interpret, explain, or generate any content. Simply transcribe what you can read and see. Include: text, numbers, equations, table data, headings, captions - but only if they are actually present in the images. If you cannot clearly read something, do not guess or fill in gaps."}]
+
+class VisionPromptBuilder:
+    """Builds prompts for vision AI processing"""
+    
+    @staticmethod
+    def build_system_prompt() -> str:
+        """Build system prompt for text extraction"""
+        return VISION_SYSTEM_PROMPT
+    
+    @staticmethod
+    def build_user_prompt() -> str:
+        """Build user prompt for text extraction"""
+        return VISION_USER_PROMPT
+
+
+class VisionAIProcessor:
+    """Handles vision AI processing with proper separation of concerns"""
+    
+    def __init__(self, config: ImageProcessingConfig):
+        self.config = config
+        self.preprocessor = ImagePreprocessor(config)
+        self.prompt_builder = VisionPromptBuilder()
+        self.llm_client = get_llm_client()
+        self.model_name = get_model_name()
+    
+    def create_image_content(self, encoded_image: str) -> dict:
+        """Create image content for LLM"""
+        return {
+            "type": "image_url",
+            "image_url": {"url": f"data:image/jpeg;base64,{encoded_image}"}
+        }
+    
+    def process_images(self, image_paths: List[str]) -> str:
+        """
+        Process multiple images with vision AI
         
-        for img_path in images:
-            # Preprocess image before encoding
-            encoded = preprocess_image(
-                img_path,
-                target_size=(800, 800),  # Max dimensions while maintaining aspect ratio
-                quality=85  # Good balance between quality and size
+        Args:
+            image_paths: List of image file paths
+            
+        Returns:
+            Extracted text content or error message
+        """
+        try:
+            # Build user content with text prompt
+            user_content = [
+                {"type": "text", "text": self.prompt_builder.build_user_prompt()}
+            ]
+            
+            # Process each image
+            for img_path in image_paths:
+                encoded = self.preprocessor.preprocess_image(img_path)
+                
+                if encoded.startswith("ERROR"):
+                    return encoded
+                
+                user_content.append(self.create_image_content(encoded))
+            
+            # Make LLM request
+            response = self.llm_client.chat.completions.create(
+                model=self.model_name,
+                messages=[
+                    {"role": "system", "content": self.prompt_builder.build_system_prompt()},
+                    {"role": "user", "content": user_content}
+                ],
+                temperature=self.config.temperature,
+                max_tokens=self.config.max_tokens
             )
             
-            if encoded.startswith("ERROR"):
-                return encoded
+            return response.choices[0].message.content
             
-            user_content.append({
-                "type": "image_url",
-                "image_url": {"url": f"data:image/jpeg;base64,{encoded}"}
-            })
+        except Exception as e:
+            return f"ERROR: Vision processing failed - {str(e)}"
 
-        response = llm_client.chat.completions.create(
-            model=LLM_MODEL,
-            messages=[
-                {"role": "system", "content": "You are a text transcription tool. Your job is to extract and transcribe ONLY the actual text and content visible in the images. Do not interpret, explain, or add any generated content. Simply transcribe what you can clearly see and read."},
-                {"role": "user", "content": user_content}
-            ],
-            temperature=0.1,
-            max_tokens=3000  # Increased from 3000 to allow more comprehensive extraction
-        )
+
+class ImageContentExtractor:
+    """High-level interface for image content extraction"""
+    
+    def __init__(self, config: Optional[ImageProcessingConfig] = None):
+        self.config = config or ImageProcessingConfig()
+        self.processor = VisionAIProcessor(self.config)
+    
+    def extract_content(self, image_paths: List[str]) -> str:
+        """
+        Extract content from images using vision AI
         
-        return response.choices[0].message.content
-    except Exception as e:
-        return f"ERROR: {str(e)}"
+        Args:
+            image_paths: List of image file paths
+            
+        Returns:
+            Extracted text content or error message
+        """
+        if not image_paths:
+            return "No images provided"
+        
+        return self.processor.process_images(image_paths)
+
+
+# Legacy functions for backward compatibility
+@traceable(name="image_vision_processing")
+def vision_understand_tool(images: List[str], standard: str = "", subject: str = "", chapter: str = "") -> str:
+    """Legacy function for backward compatibility"""
+    extractor = ImageContentExtractor()
+    return extractor.extract_content(images)
+
+
+def preprocess_image(image_path: str, target_size: Tuple[int, int] = IMAGE_TARGET_SIZE, quality: int = IMAGE_QUALITY) -> str:
+    """Legacy function for backward compatibility"""
+    config = ImageProcessingConfig(target_size=target_size, quality=quality)
+    preprocessor = ImagePreprocessor(config)
+    return preprocessor.preprocess_image(image_path)
+
 
 def read_data_from_image(image_paths: List[str]) -> str:
-    """Extract content from images using vision AI"""
-    if not image_paths:
-        return "No images provided"
-    
-    # Use vision AI to process images
-    content = vision_understand_tool(image_paths, "", "", "")
-    
-    if content.startswith("ERROR"):
-        return content
-    
-    return content 
+    """Legacy function for backward compatibility"""
+    extractor = ImageContentExtractor()
+    return extractor.extract_content(image_paths) 

@@ -16,6 +16,7 @@ from pdf2image import convert_from_path
 # Initialize logging
 from config.logging import setup_logging
 from config.configuration import get_weburl_content
+from config.settings import SUPPORTED_PDF_EXTENSION
 logger = setup_logging()
 
 app = FastAPI()
@@ -55,10 +56,10 @@ async def process_content_json(
             content = get_youtube_transcript(content_or_url)
 
         elif content_type == "pdf":
-            if len(files) != 1 or not files[0].filename.lower().endswith(".pdf"):
+            if len(files) != 1 or not files[0].filename.lower().endswith(SUPPORTED_PDF_EXTENSION):
                 raise HTTPException(400, "Exactly one PDF file is required")
 
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_pdf:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=SUPPORTED_PDF_EXTENSION) as temp_pdf:
                 temp_pdf.write(await files[0].read())
                 temp_pdf.flush()
 
@@ -91,6 +92,9 @@ async def process_content_json(
             content = extract_content_from_files(None, image_paths)
             for path in image_paths:
                 os.unlink(path)
+
+            if content.startswith("ERROR"):
+                raise HTTPException(400, f"Image processing failed: {content}")
 
         else:
             raise HTTPException(400, "Invalid content_type")
@@ -134,10 +138,10 @@ async def process_content_stream(
             content = get_youtube_transcript(content_or_url)
 
         elif content_type == "pdf":
-            if len(files) != 1 or not files[0].filename.lower().endswith(".pdf"):
+            if len(files) != 1 or not files[0].filename.lower().endswith(SUPPORTED_PDF_EXTENSION):
                 raise HTTPException(400, "Exactly one PDF file is required")
 
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_pdf:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=SUPPORTED_PDF_EXTENSION) as temp_pdf:
                 temp_pdf.write(await files[0].read())
                 temp_pdf.flush()
 
@@ -173,6 +177,9 @@ async def process_content_stream(
             for path in image_paths:
                 try: os.unlink(path)
                 except: pass
+
+            if content.startswith("ERROR"):
+                raise HTTPException(400, f"Image processing failed: {content}")
 
         else:
             raise HTTPException(400, "Invalid content_type")
@@ -260,10 +267,10 @@ async def upload_content(
             content = get_youtube_transcript(content_or_url)
 
         elif content_type == "pdf":
-            if len(files) != 1 or not files[0].filename.lower().endswith(".pdf"):
+            if len(files) != 1 or not files[0].filename.lower().endswith(SUPPORTED_PDF_EXTENSION):
                 raise HTTPException(400, "Exactly one PDF file is required")
 
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_pdf:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=SUPPORTED_PDF_EXTENSION) as temp_pdf:
                 temp_pdf.write(await files[0].read())
                 temp_pdf.flush()
 
@@ -296,6 +303,9 @@ async def upload_content(
             content = extract_content_from_files(None, image_paths)
             for path in image_paths:
                 os.unlink(path)
+
+            if content.startswith("ERROR"):
+                raise HTTPException(400, f"Image processing failed: {content}")
 
         else:
             raise HTTPException(400, "Invalid content_type")
