@@ -35,3 +35,4 @@ pytube
 openai-whisper
 chromadb
 pdf2image
+cleantext

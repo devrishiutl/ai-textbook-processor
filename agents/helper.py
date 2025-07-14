@@ -2,7 +2,8 @@
 Simple Agent Helper Functions
 """
 from typing import Dict, Any, List, Union
-from utils.utility import read_data_from_image #,read_data_from_file
+# from utils.utility import read_data_from_image #,read_data_from_file
+from utils.text_extractor import extract_text
 from pdf2image import convert_from_path
 from youtube_transcript_api import YouTubeTranscriptApi
 from pytube import YouTube
@@ -36,22 +37,25 @@ def get_youtube_transcript(video_url):
         return result['text']
 
 
-def extract_content_from_files(pdf_path: str = None, image_paths: List[str] = None) -> str:
-    """Extract content from files"""
-    if pdf_path:
-        # Convert PDF to images using pdf2image
-        images = convert_from_path(pdf_path, dpi=300)
-        return read_data_from_image(images)
-    elif image_paths:
-        return read_data_from_image(image_paths)
-    return "ERROR: No files provided"
 # def extract_content_from_files(pdf_path: str = None, image_paths: List[str] = None) -> str:
 #     """Extract content from files"""
 #     if pdf_path:
-#         return read_data_from_file(pdf_path)
+#         # Convert PDF to images using pdf2image
+#         images = convert_from_path(pdf_path, dpi=300)
+#         return read_data_from_image(images)
 #     elif image_paths:
 #         return read_data_from_image(image_paths)
 #     return "ERROR: No files provided"
+
+def extract_content_from_files(pdf_path: str = None, image_paths: List[str] = None) -> str:
+    """Extract content from files"""
+    if pdf_path:
+        # For PDF files, use the text_extractor directly
+        return extract_text(pdf_path, export_format="markdown")
+    elif image_paths:
+        # For image files, use the text_extractor
+        return extract_text(image_paths, export_format="markdown")
+    return "ERROR: No files provided"
 
 def create_initial_state(standard: str, subject: str, chapter: str, content: str) -> Dict[str, Any]:
     """Create initial state"""

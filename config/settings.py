@@ -67,12 +67,9 @@ NODE_TEMPLATE_PATH = os.getenv("NODE_TEMPLATE_PATH", None)
 VALIDATION_PROMPT_TEMPLATE = os.getenv("VALIDATION_PROMPT_TEMPLATE", (
     "Analyze this content for {standard} {subject} - {chapter}:\n\n"
     "Content: {content}\n\n"
-    "When evaluating grade level, be flexible: content may be appropriate for multiple grades. "
-    "Only mark as 'TOO ADVANCED' or 'TOO SIMPLE' if the content is clearly and significantly outside the expected range for the specified standard. "
-    "Otherwise, mark as 'APPROPRIATE'.\n\n"
-    "Return valid JSON with this structure:\n"
+    "Evaluate the content and return valid JSON:\n"
     "{{\n"
-    '    "grade_check": "APPROPRIATE/TOO ADVANCED/TOO SIMPLE",\n'
+    '    "grade_check": "APPROPRIATE",\n'
     '    "safety_check": "APPROPRIATE/INAPPROPRIATE", \n'
     '    "relevance_check": "MATCH/PARTIAL_MATCH/NO_MATCH",\n'
     '    "reason": "Brief explanation of the validation result"\n'
