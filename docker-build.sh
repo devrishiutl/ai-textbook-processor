@@ -15,7 +15,7 @@ if [ $? -eq 0 ]; then
     echo "   docker-compose up -d"
     echo ""
     echo "   Run directly with Docker:"
-    echo "   docker run -p 8003:8003 -p 8004:8004 ai-textbook-processor"
+    echo "   docker run -p 8003:8003 ai-textbook-processor"
     echo ""
     echo "   Stop the application:"
     echo "   docker-compose down"
@@ -26,7 +26,7 @@ if [ $? -eq 0 ]; then
     echo "🌐 Application will be available at:"
     echo "   - FastAPI: http://localhost:8003"
     echo "   - API Docs: http://localhost:8003/docs"
-    echo "   - Tika Server: http://localhost:8004"
+#    echo "   - Tika Server: http://localhost:8004"
     echo ""
     echo "⚠️  Remember to set your environment variables in docker-compose.yml"
 else

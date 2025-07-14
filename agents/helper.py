@@ -3,7 +3,8 @@ Simple Agent Helper Functions
 """
 from typing import Dict, Any, List, Union
 # from utils.utility import read_data_from_image #,read_data_from_file
-from utils.text_extractor import extract_text
+# from utils.text_extractor_docling import extract_text
+from utils.text_extract_MistralAI import extract_text_from_pdf, extract_text_from_image
 from pdf2image import convert_from_path
 from youtube_transcript_api import YouTubeTranscriptApi
 from pytube import YouTube
@@ -11,9 +12,25 @@ import whisper
 from cleantext import clean
 
 def clean_for_llm_prompt(raw_text):
+    """
+    Clean text for LLM prompts with JSON compatibility
+    """
+    if not raw_text:
+        return ""
+    
+    # Use cleantext for basic cleaning
     cleaned = clean(raw_text, no_line_breaks=True, replace_with_punct=" ")
-    cleaned = cleaned.replace("\\", "\\\\")  # Escape raw backslashes
-    return cleaned
+    
+    # JSON-specific fixes
+    cleaned = cleaned.replace("\\", "\\\\")  # Escape backslashes
+    cleaned = cleaned.replace('"', '\\"')  # Escape quotes
+    cleaned = cleaned.replace('\n', '\\n')  # Escape newlines
+    
+    # Fix common JSON issues
+    cleaned = cleaned.replace('}{', '},{')  # Fix missing commas
+    cleaned = cleaned.replace('][', '],[')  # Fix missing commas in arrays
+    
+    return cleaned.strip()
 
 
 def get_youtube_transcript(video_url):
@@ -47,14 +64,24 @@ def get_youtube_transcript(video_url):
 #         return read_data_from_image(image_paths)
 #     return "ERROR: No files provided"
 
+# def extract_content_from_files(pdf_path: str = None, image_paths: List[str] = None) -> str:
+#     """Extract content from files"""
+#     if pdf_path:
+#         # For PDF files, use the text_extractor directly
+#         return extract_text(pdf_path, export_format="markdown")
+#     elif image_paths:
+#         # For image files, use the text_extractor
+#         return extract_text(image_paths, export_format="markdown")
+#     return "ERROR: No files provided"
+
 def extract_content_from_files(pdf_path: str = None, image_paths: List[str] = None) -> str:
     """Extract content from files"""
     if pdf_path:
         # For PDF files, use the text_extractor directly
-        return extract_text(pdf_path, export_format="markdown")
+        return extract_text_from_pdf(pdf_path)
     elif image_paths:
         # For image files, use the text_extractor
-        return extract_text(image_paths, export_format="markdown")
+        return extract_text_from_image(image_paths)
     return "ERROR: No files provided"
 
 def create_initial_state(standard: str, subject: str, chapter: str, content: str) -> Dict[str, Any]:

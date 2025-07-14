@@ -8,17 +8,12 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
-    default-jre \
     curl \
     wget \
     unzip \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
-
-# Set Java environment
-ENV JAVA_HOME=/usr/lib/jvm/default-java
-ENV PATH=$PATH:$JAVA_HOME/bin
 
 # Create app directory
 WORKDIR /app
@@ -30,8 +25,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Download and setup Apache Tika
-RUN wget https://dlcdn.apache.org/tika/3.2.0/tika-server-standard-3.2.0.jar -O /app/tika-server.jar
+# No Tika server needed - using Docling for text extraction
 
 # Copy application code
 COPY . .
@@ -40,20 +34,11 @@ COPY . .
 RUN mkdir -p /app/logs
 
 # Expose ports
-EXPOSE 8003 8004
+# EXPOSE 8003 8004
+EXPOSE 8003
 
 # Create startup script
 RUN echo '#!/bin/bash\n\
-# Start Tika server in background\n\
-java -jar /app/tika-server.jar --host 0.0.0.0 --port 8004 &\n\
-\n\
-# Wait for Tika to start\n\
-echo "Waiting for Tika server to start..."\n\
-while ! curl -s http://localhost:8004/tika > /dev/null; do\n\
-    sleep 1\n\
-done\n\
-echo "Tika server is ready!"\n\
-\n\
 # Start the FastAPI application\n\
 python main.py\n\
 ' > /app/start.sh && chmod +x /app/start.sh
