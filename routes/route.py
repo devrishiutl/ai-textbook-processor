@@ -6,6 +6,7 @@ from agents.helper import extract_content_from_files, create_initial_state, form
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from typing import List, Optional, Dict, Any, Union
 import tempfile
 import os
@@ -18,6 +19,15 @@ from config.logging import setup_logging
 from config.configuration import get_weburl_content
 from config.settings import SUPPORTED_PDF_EXTENSION
 logger = setup_logging()
+
+# ===== REQUEST MODELS =====
+
+class GetContentRequest(BaseModel):
+    """Request model for get content endpoints"""
+    standard: str
+    subject: str
+    chapter: str
+    ids: str
 
 # ===== SINGLETON PATTERN =====
 
@@ -275,8 +285,14 @@ class APIService:
             logger.error(f"Get content error: {str(e)}")
             raise HTTPException(500, f"Get content error: {str(e)}")
     
-    async def get_content_stream(self, standard: str = Form(...), subject: str = Form(...), chapter: str = Form(...), ids: str = Form(...)):
+    async def get_content_stream(self, request: GetContentRequest):
         """Get stored content and process with streaming - SIMPLE DYNAMIC STREAMING"""
+        # Extract values from request
+        ids = request.ids
+        standard = request.standard
+        subject = request.subject
+        chapter = request.chapter
+        
         try:
             content = get_textbook_transcript(ids)
             if content is None:
