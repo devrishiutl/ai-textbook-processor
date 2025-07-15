@@ -29,7 +29,7 @@ class GetContentRequest(BaseModel):
     chapter: str
     ids: str
 
-# ===== SINGLETON PATTERN =====
+# ===== SINGLETON PATTERN ===== 
 
 class APIService:
     """Singleton API Service following SOLID principles"""
