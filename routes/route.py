@@ -338,7 +338,7 @@ class APIService:
                 # If any validation failed, stop here
                 if validation_messages:
                     error_message = "; ".join(validation_messages)
-                    yield f"data: {json.dumps({'step': 2, 'status': 'error', 'message': f'Validation failed: {error_message}', 'progress': 60, 'error': True})}\n\n"
+                    yield f"data: {json.dumps({'step': 2, 'status': 'completed', 'message': validation_data, 'progress': 60, 'error': True})}\n\n"
                     yield f"data: {json.dumps({'step': 'final', 'status': 'error', 'message': 'Processing stopped due to validation failure', 'progress': 100, 'error': True})}\n\n"
                     return
                 
