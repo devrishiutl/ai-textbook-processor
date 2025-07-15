@@ -2,7 +2,7 @@
 Clean API Routes with SOLID Principles and Singleton Pattern
 """
 from utils.chroma_utility import store_textbook_transcript, get_textbook_transcript
-from agents.helper import extract_content_from_files, create_initial_state, format_response, clean_for_llm_prompt, get_youtube_transcript
+from agents.helper import extract_content_from_files, create_initial_state, format_response, get_youtube_transcript #, clean_for_llm_prompt
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -67,20 +67,14 @@ class APIService:
     
     def _setup_routes(self):
         """Setup API routes"""
-        self.app.get("/health")(self.health_check)
-        self.app.post("/api/process-json")(self.process_content_json)
-        self.app.post("/api/process-stream")(self.process_content_stream)
         self.app.post("/api/upload-content")(self.upload_content)
-        self.app.post("/api/get-content")(self.get_content)
         self.app.post("/api/get-content-stream")(self.get_content_stream)
+        # self.app.post("/api/process-json")(self.process_content_json)
+        # self.app.post("/api/process-stream")(self.process_content_stream)
+        # self.app.post("/api/get-content")(self.get_content)
+        
     
-    async def health_check(self):
-        """Health check endpoint"""
-        return {
-            "status": "healthy",
-            "message": "AI Textbook Processor is running",
-            "version": "1.0.0"
-        }
+
     
     async def process_content_extraction(self, content_type: str, files: Optional[List[UploadFile]] = None, content_or_url: Optional[str] = None) -> str:
         """Extract content based on type - Single Responsibility"""
@@ -176,83 +170,7 @@ class APIService:
             return result
         except asyncio.TimeoutError:
             raise HTTPException(500, "Processing timeout - request took too long")
-    
-    async def process_content_json(self, standard: str = Form(...), subject: str = Form(...), chapter: str = Form(...), content_type: str = Form(...), files: Optional[Union[UploadFile, List[UploadFile]]] = File(None), content_or_url: Optional[str] = Form(None)):
-        """Process content and return JSON response"""
-        # Normalize files to a list
-        if files is None:
-            files_list = []
-        elif isinstance(files, list):
-            files_list = files
-        else:
-            files_list = [files]
-        try:
-            content = await self.process_content_extraction(content_type, files_list, content_or_url)
-            content = clean_for_llm_prompt(content)
-            state = create_initial_state(standard, subject, chapter, content)
-            result = await self.process_with_graph(state)
-            return format_response(result)
-        except Exception as e:
-            logger.error(f"Processing error: {str(e)}")
-            raise HTTPException(500, f"Processing error: {str(e)}")
-    
-    async def process_content_stream(self, standard: str = Form(...), subject: str = Form(...), chapter: str = Form(...), content_type: str = Form(...), files: Optional[Union[UploadFile, List[UploadFile]]] = File(None), content_or_url: Optional[str] = Form(None)):
-        """Process content and return streaming response"""
-        # Normalize files to a list
-        if files is None:
-            files_list = []
-        elif isinstance(files, list):
-            files_list = files
-        else:
-            files_list = [files]
-        try:
-            content = await self.process_content_extraction(content_type, files_list, content_or_url)
-            content = clean_for_llm_prompt(content)
-            state = create_initial_state(standard, subject, chapter, content)
-            result = await self.process_with_graph(state)
-            final_response = format_response(result)
-            
-            async def generate_stream():
-                steps = [
-                    ("Extracting content from uploaded files...", 10),
-                    (f"Grade validation passed for {standard}", 40),
-                    ("Content passed profanity validation", 60),
-                    (f"Content is relevant to {subject} - {chapter}", 80),
-                    ("Study notes generated successfully", 90),
-                    ("Fill-in-the-blanks generated successfully", 94),
-                    ("Matching questions generated successfully", 98),
-                    ("Q&A generated successfully", 100),
-                ]
-                
-                for i, (message, progress) in enumerate(steps, 1):
-                    yield f"data: {json.dumps({'step': i, 'status': 'processing', 'message': message, 'progress': progress - 3})}\n\n"
-                    await asyncio.sleep(0.2)
-                    yield f"data: {json.dumps({'step': i, 'status': 'completed', 'message': message, 'progress': progress})}\n\n"
-                    await asyncio.sleep(0.1)
-                
-                yield f"data: {json.dumps({'step': 'final', 'status': 'completed', 'message': 'All educational materials generated successfully!', 'progress': 100, 'success': True, 'result': final_response})}\n\n"
-            
-            return StreamingResponse(
-                generate_stream(),
-                media_type="text/plain",
-                headers={
-                    "Cache-Control": "no-cache",
-                    "Connection": "keep-alive",
-                    "Content-Type": "text/event-stream"
-                }
-            )
-        except Exception as e:
-            logger.error(f"Streaming processing error: {str(e)}")
-            return StreamingResponse(
-                iter([f"data: {json.dumps({'step': 'error', 'status': 'error', 'message': f'Processing error: {str(e)}', 'progress': 100, 'error': True})}\n\n"]),
-                media_type="text/plain",
-                headers={
-                    "Cache-Control": "no-cache",
-                    "Connection": "keep-alive",
-                    "Content-Type": "text/event-stream"
-                }
-            )
-    
+        
     async def upload_content(self, standard: str = Form(...), subject: str = Form(...), chapter: str = Form(...), content_type: str = Form(...), files: Optional[Union[UploadFile, List[UploadFile]]] = File(None), content_or_url: Optional[str] = Form(None)):
         """Upload and store content"""
         # Normalize files to a list
@@ -264,27 +182,13 @@ class APIService:
             files_list = [files]
         try:
             content = await self.process_content_extraction(content_type, files_list, content_or_url)
-            content = clean_for_llm_prompt(content)
+            # content = clean_for_llm_prompt(content)
             ids = store_textbook_transcript(standard, subject, chapter, content, content_type)
             return ids
         except Exception as e:
             logger.error(f"Upload error: {str(e)}")
             raise HTTPException(500, f"Upload error: {str(e)}")
-    
-    async def get_content(self, standard: str = Form(...), subject: str = Form(...), chapter: str = Form(...), ids: str = Form(...)):
-        """Get stored content and process"""
-        try:
-            content = get_textbook_transcript(ids)
-            if content is None:
-                raise HTTPException(404, f"Content not found with ID: {ids}")
-            
-            state = create_initial_state(standard, subject, chapter, content)
-            result = await self.process_with_graph(state)
-            return format_response(result)
-        except Exception as e:
-            logger.error(f"Get content error: {str(e)}")
-            raise HTTPException(500, f"Get content error: {str(e)}")
-    
+        
     async def get_content_stream(self, request: GetContentRequest):
         """Get stored content and process with streaming - CONDITIONAL STREAMING"""
         # Extract values from request
@@ -383,6 +287,100 @@ class APIService:
                     "Content-Type": "text/event-stream"
                 }
             )
+    
+    # async def process_content_json(self, standard: str = Form(...), subject: str = Form(...), chapter: str = Form(...), content_type: str = Form(...), files: Optional[Union[UploadFile, List[UploadFile]]] = File(None), content_or_url: Optional[str] = Form(None)):
+    #     """Process content and return JSON response"""
+    #     # Normalize files to a list
+    #     if files is None:
+    #         files_list = []
+    #     elif isinstance(files, list):
+    #         files_list = files
+    #     else:
+    #         files_list = [files]
+    #     try:
+    #         content = await self.process_content_extraction(content_type, files_list, content_or_url)
+    #         # content = clean_for_llm_prompt(content)
+    #         state = create_initial_state(standard, subject, chapter, content)
+    #         result = await self.process_with_graph(state)
+    #         return format_response(result)
+    #     except Exception as e:
+    #         logger.error(f"Processing error: {str(e)}")
+    #         raise HTTPException(500, f"Processing error: {str(e)}")
+    
+    # async def process_content_stream(self, standard: str = Form(...), subject: str = Form(...), chapter: str = Form(...), content_type: str = Form(...), files: Optional[Union[UploadFile, List[UploadFile]]] = File(None), content_or_url: Optional[str] = Form(None)):
+    #     """Process content and return streaming response"""
+    #     # Normalize files to a list
+    #     if files is None:
+    #         files_list = []
+    #     elif isinstance(files, list):
+    #         files_list = files
+    #     else:
+    #         files_list = [files]
+    #     try:
+    #         content = await self.process_content_extraction(content_type, files_list, content_or_url)
+    #         # content = clean_for_llm_prompt(content)
+    #         state = create_initial_state(standard, subject, chapter, content)
+    #         result = await self.process_with_graph(state)
+    #         final_response = format_response(result)
+            
+    #         async def generate_stream():
+    #             steps = [
+    #                 ("Extracting content from uploaded files...", 10),
+    #                 (f"Grade validation passed for {standard}", 40),
+    #                 ("Content passed profanity validation", 60),
+    #                 (f"Content is relevant to {subject} - {chapter}", 80),
+    #                 ("Study notes generated successfully", 90),
+    #                 ("Fill-in-the-blanks generated successfully", 94),
+    #                 ("Matching questions generated successfully", 98),
+    #                 ("Q&A generated successfully", 100),
+    #             ]
+                
+    #             for i, (message, progress) in enumerate(steps, 1):
+    #                 yield f"data: {json.dumps({'step': i, 'status': 'processing', 'message': message, 'progress': progress - 3})}\n\n"
+    #                 await asyncio.sleep(0.2)
+    #                 yield f"data: {json.dumps({'step': i, 'status': 'completed', 'message': message, 'progress': progress})}\n\n"
+    #                 await asyncio.sleep(0.1)
+                
+    #             yield f"data: {json.dumps({'step': 'final', 'status': 'completed', 'message': 'All educational materials generated successfully!', 'progress': 100, 'success': True, 'result': final_response})}\n\n"
+            
+    #         return StreamingResponse(
+    #             generate_stream(),
+    #             media_type="text/plain",
+    #             headers={
+    #                 "Cache-Control": "no-cache",
+    #                 "Connection": "keep-alive",
+    #                 "Content-Type": "text/event-stream"
+    #             }
+    #         )
+    #     except Exception as e:
+    #         logger.error(f"Streaming processing error: {str(e)}")
+    #         return StreamingResponse(
+    #             iter([f"data: {json.dumps({'step': 'error', 'status': 'error', 'message': f'Processing error: {str(e)}', 'progress': 100, 'error': True})}\n\n"]),
+    #             media_type="text/plain",
+    #             headers={
+    #                 "Cache-Control": "no-cache",
+    #                 "Connection": "keep-alive",
+    #                 "Content-Type": "text/event-stream"
+    #             }
+    #         )
+    
+
+    
+    # async def get_content(self, standard: str = Form(...), subject: str = Form(...), chapter: str = Form(...), ids: str = Form(...)):
+    #     """Get stored content and process"""
+    #     try:
+    #         content = get_textbook_transcript(ids)
+    #         if content is None:
+    #             raise HTTPException(404, f"Content not found with ID: {ids}")
+            
+    #         state = create_initial_state(standard, subject, chapter, content)
+    #         result = await self.process_with_graph(state)
+    #         return format_response(result)
+    #     except Exception as e:
+    #         logger.error(f"Get content error: {str(e)}")
+    #         raise HTTPException(500, f"Get content error: {str(e)}")
+    
+
 
 # Create singleton instance
 api_service = APIService()

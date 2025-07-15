@@ -11,26 +11,26 @@ from pytube import YouTube
 import whisper
 from cleantext import clean
 
-def clean_for_llm_prompt(raw_text):
-    """
-    Clean text for LLM prompts with JSON compatibility
-    """
-    if not raw_text:
-        return ""
+# def clean_for_llm_prompt(raw_text):
+#     """
+#     Clean text for LLM prompts with JSON compatibility
+#     """
+#     if not raw_text:
+#         return ""
     
-    # Use cleantext for basic cleaning
-    cleaned = clean(raw_text, no_line_breaks=True, replace_with_punct=" ")
+#     # Use cleantext for basic cleaning
+#     cleaned = clean(raw_text, no_line_breaks=True, replace_with_punct=" ")
     
-    # JSON-specific fixes
-    cleaned = cleaned.replace("\\", "\\\\")  # Escape backslashes
-    cleaned = cleaned.replace('"', '\\"')  # Escape quotes
-    cleaned = cleaned.replace('\n', '\\n')  # Escape newlines
+#     # JSON-specific fixes
+#     cleaned = cleaned.replace("\\", "\\\\")  # Escape backslashes
+#     cleaned = cleaned.replace('"', '\\"')  # Escape quotes
+#     cleaned = cleaned.replace('\n', '\\n')  # Escape newlines
     
-    # Fix common JSON issues
-    cleaned = cleaned.replace('}{', '},{')  # Fix missing commas
-    cleaned = cleaned.replace('][', '],[')  # Fix missing commas in arrays
+#     # Fix common JSON issues
+#     cleaned = cleaned.replace('}{', '},{')  # Fix missing commas
+#     cleaned = cleaned.replace('][', '],[')  # Fix missing commas in arrays
     
-    return cleaned.strip()
+#     return cleaned.strip()
 
 
 def get_youtube_transcript(video_url):
