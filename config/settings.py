@@ -69,11 +69,15 @@ VALIDATION_PROMPT_TEMPLATE = os.getenv("VALIDATION_PROMPT_TEMPLATE", (
     "Content: {content}\n\n"
     "Evaluate the content and return valid JSON:\n"
     "{{\n"
-    '    "grade_check": "APPROPRIATE",\n'
+    '    "grade_check": "APPROPRIATE/INAPPROPRIATE",\n'
     '    "safety_check": "APPROPRIATE/INAPPROPRIATE", \n'
     '    "relevance_check": "MATCH/PARTIAL_MATCH/NO_MATCH",\n'
     '    "reason": "Brief explanation of the validation result"\n'
-    "}}"
+    "}}\n\n"
+    "IMPORTANT GUIDELINES:\n"
+    "- grade_check: Use INAPPROPRIATE only if content is too advanced or too basic for the grade level\n"
+    "- safety_check: Use INAPPROPRIATE ONLY if content contains profanity, violence, or inappropriate language. Use APPROPRIATE for all other cases including educational content about sensitive topics\n"
+    "- relevance_check: Use MATCH if content directly relates to the subject/chapter, PARTIAL_MATCH if somewhat related, NO_MATCH if unrelated\n"
 ))
 
 GENERATION_PROMPT_TEMPLATE = os.getenv("GENERATION_PROMPT_TEMPLATE", (
