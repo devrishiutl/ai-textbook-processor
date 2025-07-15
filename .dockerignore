@@ -1,33 +1,82 @@
 # Git
 .git
 .gitignore
+.gitattributes
+
+# Documentation
+README.md
+*.md
+
+# Development files
+.cursorignore
+.cursorrules
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+
+# Database
+chroma_db/
+*.db
+*.sqlite
 
 # Python
-__pycache__
-*.pyc
-*.pyo
-*.pyd
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
 .Python
-env
-pip-log.txt
-pip-delete-this-directory.txt
-.tox
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.log
-.git
-.mypy_cache
-.pytest_cache
-.hypothesis
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
 # Virtual environments
 venv/
 env/
 ENV/
+env.bak/
+venv.bak/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore
 
 # IDE
 .vscode/
@@ -37,27 +86,13 @@ ENV/
 
 # OS
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
-
-# Docker
-Dockerfile
-.dockerignore
-
-# Logs
-logs/
-*.log
 
 # Temporary files
 *.tmp
-*.temp
-
-# Documentation
-README.md
-*.md
-
-# Development files
-.env
-.env.local
-.env.development
-.env.test
-.env.production 
+*.temp 

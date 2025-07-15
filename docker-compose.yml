@@ -4,22 +4,68 @@ services:
   ai-textbook-processor:
     build: .
     ports:
-      - "8003:8003"  # FastAPI application
-    env_file:
-      - .env
-      # Add your Azure OpenAI environment variables here or in .env file
-      # - AZURE_OPENAI_API_KEY=your_api_key
-      # - AZURE_OPENAI_ENDPOINT=your_endpoint
-      # - AZURE_DEPLOYMENT_NAME=your_deployment_name
-      # - LANGSMITH_API_KEY=your_langsmith_key
-      # - LANGSMITH_PROJECT=your_project_name
+      - "8003:8003"
     environment:
-      - PYTHONUNBUFFERED=1
+      # LLM Provider Configuration
+      - LLM_PROVIDER=${LLM_PROVIDER}
+      - LANGSMITH_API_KEY=${LANGSMITH_API_KEY}
+      - LANGSMITH_PROJECT=${LANGSMITH_PROJECT:-ai-textbook-processor}
+      - LANGSMITH_ENDPOINT=${LANGSMITH_ENDPOINT:-https://api.smith.langchain.com}
+      
+      # Azure OpenAI Configuration
+      - AZURE_OPENAI_API_BASE=${AZURE_OPENAI_API_BASE}
+      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}
+      - AZURE_OPENAI_DEPLOYMENT_NAME=${AZURE_OPENAI_DEPLOYMENT_NAME}
+      - AZURE_OPENAI_API_VERSION=${AZURE_OPENAI_API_VERSION:-2024-02-15-preview}
+      
+      # OpenAI Configuration
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      
+      # Serper API Configuration
+      - SERPER_API_KEY=${SERPER_API_KEY}
+      
+      # LLM Settings
+      - VALIDATION_TEMPERATURE=${VALIDATION_TEMPERATURE:-0.05}
+      - VALIDATION_MAX_TOKENS=${VALIDATION_MAX_TOKENS:-200}
+      - GENERATION_TEMPERATURE=${GENERATION_TEMPERATURE:-0.2}
+      - GENERATION_MAX_TOKENS=${GENERATION_MAX_TOKENS:-4000}
+      
+      # Logging Configuration
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      
+      # Image Processing Settings
+      - IMAGE_TARGET_WIDTH=${IMAGE_TARGET_WIDTH:-800}
+      - IMAGE_TARGET_HEIGHT=${IMAGE_TARGET_HEIGHT:-800}
+      - IMAGE_QUALITY=${IMAGE_QUALITY:-85}
+      - IMAGE_MAX_TOKENS=${IMAGE_MAX_TOKENS:-3000}
+      - IMAGE_TEMPERATURE=${IMAGE_TEMPERATURE:-0.1}
+      
+      # Content Processing Settings
+      - VALIDATION_MAX_CONTENT_LENGTH=${VALIDATION_MAX_CONTENT_LENGTH:-1000}
+      - GENERATION_MAX_CONTENT_LENGTH=${GENERATION_MAX_CONTENT_LENGTH:-3000}
+      - VALIDATION_GRADE_CHECK=${VALIDATION_GRADE_CHECK:-APPROPRIATE}
+      - VALIDATION_SAFETY_CHECK=${VALIDATION_SAFETY_CHECK:-APPROPRIATE}
+      - VALIDATION_RELEVANCE_CHECK=${VALIDATION_RELEVANCE_CHECK:-MATCH}
+      
+      # Vision AI Prompts
+      - VISION_SYSTEM_PROMPT=${VISION_SYSTEM_PROMPT}
+      - VISION_USER_PROMPT=${VISION_USER_PROMPT}
+      
+      # Node Templates
+      - NODE_TEMPLATE_PATH=${NODE_TEMPLATE_PATH}
+      - VALIDATION_PROMPT_TEMPLATE=${VALIDATION_PROMPT_TEMPLATE}
+      - GENERATION_PROMPT_TEMPLATE=${GENERATION_PROMPT_TEMPLATE}
+      - GENERATION_JSON_TEMPLATE=${GENERATION_JSON_TEMPLATE}
+    
     volumes:
       - ./logs:/app/logs
+      - ./chroma_db:/app/chroma_db
+    
     restart: unless-stopped
+    
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8003/docs"]
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
       interval: 30s
       timeout: 10s
       retries: 3

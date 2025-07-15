@@ -101,6 +101,7 @@ curl -X POST "http://localhost:8003/api/process-json" \
     "safety_check": "APPROPRIATE",
     "relevance_check": "MATCH"
   }
+
 }
 ```
 

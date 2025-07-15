@@ -6,7 +6,7 @@ from agents.helper import extract_content_from_files, create_initial_state, form
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 import tempfile
 import os
 import json
@@ -35,7 +35,13 @@ class APIService:
         if self._initialized:
             return
         self._initialized = True
-        self.app = FastAPI()
+        self.app = FastAPI(
+            title="AI Textbook Processor",
+            description="AI-powered system for processing educational content",
+            version="1.0.0",
+            docs_url="/docs",
+            redoc_url="/redoc"
+        )
         self._setup_cors()
         self._setup_routes()
     
@@ -51,11 +57,20 @@ class APIService:
     
     def _setup_routes(self):
         """Setup API routes"""
+        self.app.get("/health")(self.health_check)
         self.app.post("/api/process-json")(self.process_content_json)
         self.app.post("/api/process-stream")(self.process_content_stream)
         self.app.post("/api/upload-content")(self.upload_content)
         self.app.post("/api/get-content")(self.get_content)
         self.app.post("/api/get-content-stream")(self.get_content_stream)
+    
+    async def health_check(self):
+        """Health check endpoint"""
+        return {
+            "status": "healthy",
+            "message": "AI Textbook Processor is running",
+            "version": "1.0.0"
+        }
     
     async def process_content_extraction(self, content_type: str, files: Optional[List[UploadFile]] = None, content_or_url: Optional[str] = None) -> str:
         """Extract content based on type - Single Responsibility"""
@@ -72,16 +87,24 @@ class APIService:
                 raise HTTPException(400, "youtube_url required")
             return get_youtube_transcript(content_or_url)
         elif content_type == "pdf":
+            if not files:
+                raise HTTPException(400, "files required for PDF processing")
             return await self._process_pdf(files)
         elif content_type == "images":
+            if not files:
+                raise HTTPException(400, "files required for image processing")
             return await self._process_images(files)
         else:
             raise HTTPException(400, "Invalid content_type")
     
     async def _process_pdf(self, files: List[UploadFile]) -> str:
         """Process PDF files - Single Responsibility"""
-        if not files or len(files) != 1 or not files[0].filename.lower().endswith(SUPPORTED_PDF_EXTENSION):
+        if not files:
+            raise HTTPException(400, "No files provided")
+        if len(files) != 1:
             raise HTTPException(400, "Exactly one PDF file is required")
+        if not files[0].filename.lower().endswith(SUPPORTED_PDF_EXTENSION):
+            raise HTTPException(400, "File must be a PDF")
         
         with tempfile.NamedTemporaryFile(delete=False, suffix=SUPPORTED_PDF_EXTENSION) as temp_pdf:
             temp_pdf.write(await files[0].read())
@@ -113,7 +136,7 @@ class APIService:
     async def _process_images(self, files: List[UploadFile]) -> str:
         """Process image files - Single Responsibility"""
         if not files:
-            raise HTTPException(400, "files required")
+            raise HTTPException(400, "No files provided")
         
         image_paths = []
         for file in files:
@@ -144,10 +167,17 @@ class APIService:
         except asyncio.TimeoutError:
             raise HTTPException(500, "Processing timeout - request took too long")
     
-    async def process_content_json(self, standard: str = Form(...), subject: str = Form(...), chapter: str = Form(...), content_type: str = Form(...), files: Optional[List[UploadFile]] = File([]), content_or_url: Optional[str] = Form(None)):
+    async def process_content_json(self, standard: str = Form(...), subject: str = Form(...), chapter: str = Form(...), content_type: str = Form(...), files: Optional[Union[UploadFile, List[UploadFile]]] = File(None), content_or_url: Optional[str] = Form(None)):
         """Process content and return JSON response"""
+        # Normalize files to a list
+        if files is None:
+            files_list = []
+        elif isinstance(files, list):
+            files_list = files
+        else:
+            files_list = [files]
         try:
-            content = await self.process_content_extraction(content_type, files, content_or_url)
+            content = await self.process_content_extraction(content_type, files_list, content_or_url)
             content = clean_for_llm_prompt(content)
             state = create_initial_state(standard, subject, chapter, content)
             result = await self.process_with_graph(state)
@@ -156,10 +186,17 @@ class APIService:
             logger.error(f"Processing error: {str(e)}")
             raise HTTPException(500, f"Processing error: {str(e)}")
     
-    async def process_content_stream(self, standard: str = Form(...), subject: str = Form(...), chapter: str = Form(...), content_type: str = Form(...), files: Optional[List[UploadFile]] = File([]), content_or_url: Optional[str] = Form(None)):
+    async def process_content_stream(self, standard: str = Form(...), subject: str = Form(...), chapter: str = Form(...), content_type: str = Form(...), files: Optional[Union[UploadFile, List[UploadFile]]] = File(None), content_or_url: Optional[str] = Form(None)):
         """Process content and return streaming response"""
+        # Normalize files to a list
+        if files is None:
+            files_list = []
+        elif isinstance(files, list):
+            files_list = files
+        else:
+            files_list = [files]
         try:
-            content = await self.process_content_extraction(content_type, files, content_or_url)
+            content = await self.process_content_extraction(content_type, files_list, content_or_url)
             content = clean_for_llm_prompt(content)
             state = create_initial_state(standard, subject, chapter, content)
             result = await self.process_with_graph(state)
@@ -206,10 +243,17 @@ class APIService:
                 }
             )
     
-    async def upload_content(self, standard: str = Form(...), subject: str = Form(...), chapter: str = Form(...), content_type: str = Form(...), files: Optional[List[UploadFile]] = File([]), content_or_url: Optional[str] = Form(None)):
+    async def upload_content(self, standard: str = Form(...), subject: str = Form(...), chapter: str = Form(...), content_type: str = Form(...), files: Optional[Union[UploadFile, List[UploadFile]]] = File(None), content_or_url: Optional[str] = Form(None)):
         """Upload and store content"""
+        # Normalize files to a list
+        if files is None:
+            files_list = []
+        elif isinstance(files, list):
+            files_list = files
+        else:
+            files_list = [files]
         try:
-            content = await self.process_content_extraction(content_type, files, content_or_url)
+            content = await self.process_content_extraction(content_type, files_list, content_or_url)
             content = clean_for_llm_prompt(content)
             ids = store_textbook_transcript(standard, subject, chapter, content, content_type)
             return ids

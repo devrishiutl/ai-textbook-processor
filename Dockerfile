@@ -1,47 +1,58 @@
-# Use Python 3.11 slim image as base
+# Use Python 3.11 slim image for smaller size
 FROM python:3.11-slim
 
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV DEBIAN_FRONTEND=noninteractive
+# Set working directory
+WORKDIR /app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
-    curl \
-    wget \
-    unzip \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
-
-# Create app directory
-WORKDIR /app
+    gcc \
+    g++ \
+    libffi-dev \
+    libssl-dev \
+    poppler-utils \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
 COPY requirements.txt .
 
 # Install Python dependencies
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
-
-# No Tika server needed - using Docling for text extraction
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
 
 # Create logs directory
-RUN mkdir -p /app/logs
+RUN mkdir -p logs
 
-# Expose ports
-# EXPOSE 8003 8004
+# Set environment variables with defaults from configuration.py and settings.py
+ENV LLM_PROVIDER=openai
+ENV LANGSMITH_PROJECT=ai-textbook-processor
+ENV LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+ENV AZURE_OPENAI_API_VERSION=2024-02-15-preview
+ENV OPENAI_MODEL=gpt-4o-mini
+ENV VALIDATION_TEMPERATURE=0.05
+ENV VALIDATION_MAX_TOKENS=200
+ENV GENERATION_TEMPERATURE=0.2
+ENV GENERATION_MAX_TOKENS=4000
+ENV LOG_LEVEL=INFO
+ENV IMAGE_TARGET_WIDTH=800
+ENV IMAGE_TARGET_HEIGHT=800
+ENV IMAGE_QUALITY=85
+ENV IMAGE_MAX_TOKENS=3000
+ENV IMAGE_TEMPERATURE=0.1
+ENV VALIDATION_MAX_CONTENT_LENGTH=1000
+ENV GENERATION_MAX_CONTENT_LENGTH=3000
+ENV VALIDATION_GRADE_CHECK=APPROPRIATE
+ENV VALIDATION_SAFETY_CHECK=APPROPRIATE
+ENV VALIDATION_RELEVANCE_CHECK=MATCH
+
+# Expose port
 EXPOSE 8003
 
-# Create startup script
-RUN echo '#!/bin/bash\n\
-# Start the FastAPI application\n\
-python main.py\n\
-' > /app/start.sh && chmod +x /app/start.sh
+# Health check
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8003/health || exit 1
 
-# Set the default command
-CMD ["/app/start.sh"] 
+# Run the application
+CMD ["python", "main.py"] 
