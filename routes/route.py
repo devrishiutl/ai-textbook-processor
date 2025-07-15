@@ -286,7 +286,7 @@ class APIService:
             raise HTTPException(500, f"Get content error: {str(e)}")
     
     async def get_content_stream(self, request: GetContentRequest):
-        """Get stored content and process with streaming - SIMPLE DYNAMIC STREAMING"""
+        """Get stored content and process with streaming - CONDITIONAL STREAMING"""
         # Extract values from request
         ids = request.ids
         standard = request.standard
@@ -314,7 +314,36 @@ class APIService:
                 from agents.nodes import validate_content
                 validation_result = validate_content(validation_state)
                 
-                yield f"data: {json.dumps({'step': 2, 'status': 'completed', 'message': validation_result.get('validation_result', 'Validation completed'), 'progress': 60})}\n\n"
+                # Check validation results
+                validation_data = validation_result.get('validation_result', {})
+                if isinstance(validation_data, str):
+                    # If validation_result is a string (error), stop here
+                    yield f"data: {json.dumps({'step': 2, 'status': 'error', 'message': f'Validation failed: {validation_data}', 'progress': 60, 'error': True})}\n\n"
+                    yield f"data: {json.dumps({'step': 'final', 'status': 'error', 'message': 'Processing stopped due to validation failure', 'progress': 100, 'error': True})}\n\n"
+                    return
+                
+                # Check individual validation criteria
+                grade_check = validation_data.get('grade_check', 'INAPPROPRIATE')
+                safety_check = validation_data.get('safety_check', 'INAPPROPRIATE')
+                relevance_check = validation_data.get('relevance_check', 'NO_MATCH')
+                
+                validation_messages = []
+                if grade_check != 'APPROPRIATE':
+                    validation_messages.append(f"Grade level check failed: {grade_check}")
+                if safety_check != 'APPROPRIATE':
+                    validation_messages.append(f"Safety check failed: {safety_check}")
+                if relevance_check not in ['MATCH', 'PARTIAL_MATCH']:
+                    validation_messages.append(f"Relevance check failed: {relevance_check}")
+                
+                # If any validation failed, stop here
+                if validation_messages:
+                    error_message = "; ".join(validation_messages)
+                    yield f"data: {json.dumps({'step': 2, 'status': 'error', 'message': f'Validation failed: {error_message}', 'progress': 60, 'error': True})}\n\n"
+                    yield f"data: {json.dumps({'step': 'final', 'status': 'error', 'message': 'Processing stopped due to validation failure', 'progress': 100, 'error': True})}\n\n"
+                    return
+                
+                # Validation passed - continue with generation
+                yield f"data: {json.dumps({'step': 2, 'status': 'completed', 'message': 'All validation checks passed', 'progress': 60})}\n\n"
                 await asyncio.sleep(0.2)
                 
                 # Step 3: Data Generation (Dynamic - call invoke)
