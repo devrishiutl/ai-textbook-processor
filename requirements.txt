@@ -12,6 +12,9 @@ langgraph==0.4.8
 langchain-core>=0.3.68
 langsmith>=0.4.4
 
+# Trustcall for robust JSON parsing
+trustcall>=0.0.39
+
 # Image processing
 Pillow==11.2.1
 

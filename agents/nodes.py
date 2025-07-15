@@ -1,7 +1,7 @@
 """
 Graph Nodes following SOLID principles
 """
-from typing import Dict, Any, Protocol, Optional
+from typing import Dict, Any, Protocol, Optional, List
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 from config.configuration import get_validation_llm, get_generation_llm
@@ -13,10 +13,71 @@ from config.settings import (
     GENERATION_JSON_TEMPLATE
 )
 from langsmith import traceable
+from pydantic import BaseModel, Field
+from trustcall import create_extractor
 import re
 import json
 
 logger = get_logger(__name__)
+
+
+# ===== PYDANTIC MODELS =====
+
+class ValidationResult(BaseModel):
+    """Validation result schema"""
+    grade_check: str = Field(description="Whether content is appropriate for the grade level")
+    safety_check: str = Field(description="Whether content is safe and appropriate")
+    relevance_check: str = Field(description="Whether content is relevant to the subject/chapter")
+    reason: str = Field(description="Brief explanation of the validation result")
+
+
+class Flashcard(BaseModel):
+    """Flashcard schema"""
+    term: str = Field(description="The key term")
+    definition: str = Field(description="Clear and concise definition of the term")
+    example: str = Field(description="Example or usage of the term")
+
+
+class MCQQuestion(BaseModel):
+    """Multiple choice question schema"""
+    question: str = Field(description="The question text")
+    options: Dict[str, str] = Field(description="Answer options A, B, C, D")
+    correct_answer: str = Field(description="The correct answer (A, B, C, or D)")
+    explanation: str = Field(description="Brief explanation of why this is correct")
+
+
+class FillInTheBlanks(BaseModel):
+    """Fill in the blanks section schema"""
+    questions: Dict[str, str] = Field(description="Fill in the blank questions")
+    answers: Dict[str, str] = Field(description="Answers for the questions")
+
+
+class MatchTheFollowing(BaseModel):
+    """Match the following section schema"""
+    column_a: Dict[str, str] = Field(description="Terms in column A")
+    column_b: Dict[str, str] = Field(description="Definitions in column B")
+    answers: Dict[str, str] = Field(description="Matching answers")
+
+
+class QuestionAnswer(BaseModel):
+    """Question and answer section schema"""
+    questions: Dict[str, str] = Field(description="Questions")
+    answers: Dict[str, str] = Field(description="Answers to the questions")
+
+
+class MCQSection(BaseModel):
+    """MCQ section schema"""
+    questions: Dict[str, MCQQuestion] = Field(description="Multiple choice questions")
+
+
+class GenerationResult(BaseModel):
+    """Generation result schema matching the JSON template"""
+    importantNotes: str = Field(description="Study notes with markdown formatting")
+    flashcards: Dict[str, Flashcard] = Field(description="Flashcards with key terms")
+    mcq: MCQSection = Field(description="Multiple choice questions section")
+    fillInTheBlanks: FillInTheBlanks = Field(description="Fill in the blank questions")
+    matchTheFollowing: MatchTheFollowing = Field(description="Match the following questions")
+    questionAnswer: QuestionAnswer = Field(description="Question and answer section")
 
 
 # ===== ABSTRACTIONS =====
@@ -106,25 +167,34 @@ class GenerationPromptBuilder(PromptBuilder):
         )
 
 
-class JSONResponseParser(JSONParser):
-    """Parses JSON from LLM responses"""
+class TrustcallJSONParser(JSONParser):
+    """Parses JSON using trustcall for robust error handling"""
+    
+    def __init__(self, llm, model_class):
+        self.llm = llm
+        self.model_class = model_class
+        self.extractor = create_extractor(
+            llm,
+            tools=[model_class],
+            tool_choice=model_class.__name__
+        )
     
     def parse_json(self, text: str) -> Optional[Dict[str, Any]]:
         try:
-            # Extract JSON
-            start = text.find('{')
-            end = text.rfind('}')
-            if start == -1 or end == -1:
+            # Use trustcall to extract structured output
+            result = self.extractor.invoke({
+                "messages": [{"role": "user", "content": text}]
+            })
+            
+            if result["responses"]:
+                parsed_result = result["responses"][0]
+                return parsed_result.model_dump()
+            else:
+                logger.error(f"No {self.model_class.__name__} result returned from trustcall")
                 return None
-            
-            json_str = text[start:end+1]
-            # Fix common JSON issues
-            json_str = re.sub(r'\\(?=\(|\))', r'\\\\', json_str)
-            json_str = json_str.replace('\\', '\\\\')
-            
-            return json.loads(json_str)
+                
         except Exception as e:
-            logger.error(f"JSON parsing error: {e}")
+            logger.error(f"Trustcall JSON parsing error: {e}")
             return None
 
 
@@ -153,25 +223,27 @@ class ContentValidator:
     def __init__(self, config: ValidationConfig):
         self.config = config
         self.prompt_builder = ValidationPromptBuilder()
-        self.json_parser = JSONResponseParser()
         self.state_manager = StateManagerImpl()
         self.token_tracker = TokenUsageTracker()
     
     def validate(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        """Validate content using SOLID principles"""
+        """Validate content using SOLID principles with trustcall"""
         try:
             # Build prompt
             prompt = self.prompt_builder.build_prompt(state)
             
-            # Get LLM response
+            # Get LLM and create trustcall parser
             llm = get_validation_llm()
-            response = llm.invoke(prompt)
+            json_parser = TrustcallJSONParser(llm, ValidationResult)
             
-            # Track usage
-            self.token_tracker.log_usage(response, "Validation")
+            # Track usage (if available)
+            try:
+                self.token_tracker.log_usage(llm, "Validation")
+            except:
+                pass
             
-            # Parse response
-            validation_result = self.json_parser.parse_json(response.content)
+            # Parse response using trustcall
+            validation_result = json_parser.parse_json(prompt)
             
             if validation_result:
                 self.state_manager.update_state(state, "validation_result", validation_result)
@@ -213,13 +285,12 @@ class ContentGenerator:
     
     def __init__(self, config: GenerationConfig):
         self.config = config
-        self.json_parser = JSONResponseParser()
         self.state_manager = StateManagerImpl()
         self.token_tracker = TokenUsageTracker()
         self.prompt_builder = GenerationPromptBuilder(GENERATION_JSON_TEMPLATE)
     
     def generate(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        """Generate content using SOLID principles"""
+        """Generate content using SOLID principles with trustcall"""
         # Check if validation passed
         if not state.get("is_valid"):
             logger.warning("Skipping content generation - validation failed")
@@ -229,15 +300,18 @@ class ContentGenerator:
             # Build prompt
             prompt = self.prompt_builder.build_prompt(state)
             
-            # Get LLM response
+            # Get LLM and create trustcall parser
             llm = get_generation_llm()
-            response = llm.invoke(prompt)
+            json_parser = TrustcallJSONParser(llm, GenerationResult)
             
-            # Track usage
-            self.token_tracker.log_usage(response, "Generation")
+            # Track usage (if available)
+            try:
+                self.token_tracker.log_usage(llm, "Generation")
+            except:
+                pass
             
-            # Parse response
-            generated_content = self.json_parser.parse_json(response.content)
+            # Parse response using trustcall
+            generated_content = json_parser.parse_json(prompt)
             
             if generated_content:
                 self.state_manager.update_state(state, "generated_content", generated_content)

@@ -94,33 +94,31 @@ GENERATION_PROMPT_TEMPLATE = os.getenv("GENERATION_PROMPT_TEMPLATE", (
 
 GENERATION_JSON_TEMPLATE = os.getenv("GENERATION_JSON_TEMPLATE", '''{
     "importantNotes": "Study notes with markdown formatting",
-    "criticalWords": {
-        "flashcards": {
-            "1": {
-                "term": "Key Term 1",
-                "definition": "Clear and concise definition of the term",
-                "example": "Example or usage of the term"
-            },
-            "2": {
-                "term": "Key Term 2", 
-                "definition": "Clear and concise definition of the term",
-                "example": "Example or usage of the term"
-            },
-            "3": {
-                "term": "Key Term 3",
-                "definition": "Clear and concise definition of the term", 
-                "example": "Example or usage of the term"
-            },
-            "4": {
-                "term": "Key Term 4",
-                "definition": "Clear and concise definition of the term",
-                "example": "Example or usage of the term"
-            },
-            "5": {
-                "term": "Key Term 5",
-                "definition": "Clear and concise definition of the term",
-                "example": "Example or usage of the term"
-            }
+    "flashcards": {
+        "1": {
+            "term": "Key Term 1",
+            "definition": "Clear and concise definition of the term",
+            "example": "Example or usage of the term"
+        },
+        "2": {
+            "term": "Key Term 2", 
+            "definition": "Clear and concise definition of the term",
+            "example": "Example or usage of the term"
+        },
+        "3": {
+            "term": "Key Term 3",
+            "definition": "Clear and concise definition of the term", 
+            "example": "Example or usage of the term"
+        },
+        "4": {
+            "term": "Key Term 4",
+            "definition": "Clear and concise definition of the term",
+            "example": "Example or usage of the term"
+        },
+        "5": {
+            "term": "Key Term 5",
+            "definition": "Clear and concise definition of the term",
+            "example": "Example or usage of the term"
         }
     },
     "mcq": {
